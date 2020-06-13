@@ -6,6 +6,7 @@
 #include <linux/uaccess.h>              /* copy_from_user put_user */
 #include <linux/mm.h>
 #include <linux/version.h>
+#include <linux/slab.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,12,0)
 #	include <linux/signal.h>
 #else
@@ -78,29 +79,42 @@ static char block[1024] = { 0 }; /*XXX allow whitelist not block blacklist? */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 asmlinkage long sys_batch(const struct pt_regs *regs)
 {
-	unsigned long a0    = regs->di;
-	unsigned long a1    = regs->si;
+	unsigned long ur0   = regs->di;
+	unsigned long uc0   = regs->si;
 	unsigned long ncall = regs->dx;
 //	unsigned long flags = regs->r10;
 //	unsigned long size  = regs->r8;
 #else
-asmlinkage long sys_batch(unsigned long a0, unsigned long a1, unsigned long ncall,
+asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long ncall,
         __attribute__((unused)) long flags, __attribute__((unused)) long size)
 {
 #endif
-	long          r = 0, *rets = (long *)a0, off = 0, eno = EFAULT;
-	unsigned long i;
-	syscall_t     call, *calls = (syscall_t *)a1, *c = &call;
-	for (i = 0; i < ncall; i += 1 + off) {
-		void *f;
-		if (unlikely(copy_from_user(c, &calls[i], sizeof call)))
-			goto err_ret;
+	long          r = 0, off = 0, *krv = NULL;
+	unsigned long i = 0, urEnd = ur0 + ncall * sizeof(long),
+	              aEnd = uc0 + ncall * sizeof(syscall_t), kr0, kc0;
+	syscall_t    *calls = (syscall_t *)uc0, *buf = NULL;
+	gfp_t         gfp_flags = GFP_KERNEL | ___GFP_ZERO;
+	if (!(buf = kmalloc(ncall * (sizeof *krv + sizeof *calls), gfp_flags)))
+		return -ENOMEM;
+	krv = (long *)(kr0 = (unsigned long)buf);
+	kc0 = kr0 + ncall * sizeof(long);
+	if (unlikely(copy_from_user((void *)kc0, calls, ncall * sizeof *calls)))
+		{ krv[i] = -EFAULT; goto errRet; }
+	for (/**/; i < ncall; i += 1 + off) {
+		void      *f;
+		syscall_t *c = (syscall_t *)(kc0 + i * sizeof *c);
 		if (c->nr == __NR_wdcpy) {
-			long tmp;     /* Do *(long *)arg[0]= *(long *)arg[1] */
-			if (unlikely(get_user(tmp, (long *)c->arg[1])))
-				goto err_ret;
-			if (unlikely(put_user(tmp, (long *)c->arg[0])))
-				goto err_ret;
+			unsigned long tmp;               // Do *dst = *src
+			unsigned long src = (unsigned long)c->arg[1];
+			unsigned long dst = (unsigned long)c->arg[0];
+			if (ur0 <= src && src < urEnd)
+				tmp = *(unsigned long *)(kr0 + (src - ur0));
+			else if (unlikely(get_user(tmp, (long *)c->arg[1])))
+				{ krv[i] = -EFAULT; goto errRet; }
+			if (uc0 <= dst && dst < aEnd)
+				*(unsigned long *)(kc0 + (dst - uc0)) = tmp;
+			else if (unlikely(put_user(tmp, (long *)c->arg[0])))
+				{ krv[i] = -EFAULT; goto errRet; }
 			continue;
 		} else if (c->nr == __NR_jmpfwd) {
 			off = c->jumpFail;
@@ -108,13 +122,8 @@ asmlinkage long sys_batch(unsigned long a0, unsigned long a1, unsigned long ncal
 		}
 		if (unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
 		             block[c->nr] || c->argc > 6 || !(f = scTab[c->nr])))
-		{
-			eno = ENOSYS;
-			goto err_ret;
-		}
-		r = indirect_call(f, c->argc, c->arg);
-		if (unlikely(put_user(r, &rets[i])))  // slow but hard to avoid
-			goto err_ret;
+			{ krv[i] = -ENOSYS; goto errRet; }
+		r = krv[i] = indirect_call(f, c->argc, c->arg);
 		if ((unsigned long)r > 18446744073709547520ULL) // -4096 < r < 0
 			off = c->jumpFail;
 		else if (r > 0)
@@ -124,10 +133,11 @@ asmlinkage long sys_batch(unsigned long a0, unsigned long a1, unsigned long ncal
 cont:		if (off < 0)
 			break;
 	}
-	return i < ncall ? i : ncall - 1;
-err_ret:
-	if (unlikely(put_user(-eno, &rets[i])))
-		segv(&rets[i]); // Cannot store EFAULT
+	if (i >= ncall)
+		i--;
+errRet: if (unlikely(copy_to_user((void *)ur0, krv, (i + 1) * sizeof(long))))
+		segv((void *)ur0); // Cannot store EFAULT
+	kfree(buf);
 	return i;
 }
 #define store_cr0(x) asm volatile("mov %0,%%cr0" : "+r"(x), "+m"(__force_order))
