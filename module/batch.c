@@ -148,7 +148,7 @@ static int __init mod_init(void) {
 #endif
 	sys_oldcall0 = scTab[__NR_batch];          /* save syscall */
 	memset(&block[0], 0, sizeof block);        /* maybe redundant. */
-	block[__NR_execve] = block[__NR_vfork] /* = ... XXX */ = 1;
+	block[__NR_batch] = block[__NR_execve] = block[__NR_vfork] /*XXX*/ = 1;
 	allow_writes();
 	scTab[__NR_batch] = sys_batch;             /* install sys_batch */
 	disallow_writes();
