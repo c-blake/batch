@@ -9,13 +9,11 @@ should be no need to restrict code uploaders to be privileged or verify
 code like EBPF.  All we need to do to add this to Linux is decide on a
 convenient API and then loop over a buffer of system calls.  That's what
 this package does.  It may not be completely right "as is" or as fast as
-possible.  Getting the general solution right seems better than stunts
-like `pread=lseek+read` and a ton simpler than EBPF, though.  I'm open to
-suggestions if you have them.
+possible.  I'm open to suggestions if you have them.
 
 Safety flows from allowing only minimal control flow to occur in-kernel that
 is trivially loop-free/bounded compute time.  Specifically, it allows
-skipping forward by more than one slot in the array of system calls on a
+jumping forward by more than one slot in the array of system calls on a
 trivalent condition of a sub-call return `{ -4096 < r < 0, == 0, or > 0 }`
 (conventionally usually meaning { error, success/done/EOF, and more-work-or
 answer} conditions).  Not all system call targets are accepted because the
@@ -58,8 +56,10 @@ cd module
 as-root insmod batch.ko
 cd ../examples; make
 ./mdu
+BATCH_EMUL=1 ./mdu
+du -sbl
 ```
-At present, I would not do recommend deploying this on a system with any
-untrusted users/user code.  The block list is obviously incomplete, and it
-hasn't been very vetted for security implications.  It just seemed worth
-sharing/getting feedback upon (though I expect to hear only crickets).
+At present, I would not recommend deploying this on a system with untrusted
+user code.  The block list is obviously incomplete, and it hasn't been very
+vetted for security implications.  It just seemed worth sharing/getting
+feedback upon (though I expect to hear only crickets).
