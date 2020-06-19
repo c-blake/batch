@@ -86,7 +86,7 @@ cont:		if (off < 0)
 	return ncall - 1;
 }
 
-int batch_emul_init(void) {            // Manual on/off is nice for now.  Later
+static int batch_emul_init(void) {            // Manual on/off is nice for now.  Later
 	char *getenv(const char *);    // can instead test if it works to call
 	return !!getenv("BATCH_EMUL"); // syscall(__NR_batch, {__NR_getpid}).
 }
