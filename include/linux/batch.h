@@ -56,6 +56,8 @@ static inline long batchE(long rets[], struct syscall calls[],
 	syscall_t *c;
 	unsigned   i;
 	long       r = 0, off = 0;
+	if (ncall == 0)
+		return 0;
 	for (i = 0; i < ncall; i += 1 + off) {
 		c = &calls[i];
 		if (c->nr == __NR_wdcpy) {
@@ -86,9 +88,10 @@ cont:		if (off < 0)
 	return ncall - 1;
 }
 
-static int batch_emul_init(void) {            // Manual on/off is nice for now.  Later
-	char *getenv(const char *);    // can instead test if it works to call
-	return !!getenv("BATCH_EMUL"); // syscall(__NR_batch, {__NR_getpid}).
+static int batch_emul_init(void) {      // Auto-detect unless $BATCH_EMUL..
+	char *getenv(const char *);     //..forces pure user-space emulation.
+	return !!getenv("BATCH_EMUL") ||
+	       (syscall(__NR_batch, (long *)0, (syscall_t *)0, 0, 0, 0) != 0);
 }
 
 static inline long batch(long rets[], struct syscall calls[],

@@ -94,6 +94,8 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long nc
 	              aEnd = uc0 + ncall * sizeof(syscall_t), kr0, kc0;
 	syscall_t    *calls = (syscall_t *)uc0, *buf = NULL;
 	gfp_t         gfp_flags = GFP_KERNEL | ___GFP_ZERO;
+        if (ncall == 0)
+            return 0;
 	if (!(buf = kmalloc(ncall * (sizeof *krv + sizeof *calls), gfp_flags)))
 		return -ENOMEM;
 	krv = (long *)(kr0 = (unsigned long)buf);
