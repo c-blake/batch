@@ -1,15 +1,15 @@
 # batch: Generic Linux System Call Batching
 
 Kernel <-> user crossings are expensive.  Across any such boundary (IPC or
-networks messages are other obvious cases), it makes sense to have a batch
-interface to get as much work done per crossing as possible.  In the
-user-kernel setting, privilege checking and such is already done inside
-system call code.  So, security implications should be minimal and there
-should be no need to restrict code uploaders to be privileged or verify
-code like EBPF.  All we need to do to add this to Linux is decide on a
-convenient API and then loop over a buffer of system calls.  That's what
-this package does.  It may not be completely right "as is" or as fast as
-possible.  I'm open to suggestions if you have them.
+network messages are other obvious cases), it makes sense to get as much work
+done per crossing as possible.  Batching is one approach.  In the user-kernel
+setting, privilege checking and such is already done inside system call code.
+So, security implications should be minimal and there should be no need to
+restrict code uploaders to be privileged or verify code like EBPF.  All we
+need to do to add this to Linux is decide on a convenient API and then loop
+over a buffer of system calls.  That's what this package does.  It may not be
+completely right "as is" or as fast as possible.  I'm open to suggestions if
+you have them.
 
 Safety flows from allowing only minimal control flow to occur in-kernel that
 is trivially loop-free/bounded compute time.  Specifically, it allows
@@ -45,7 +45,7 @@ is easy to "emulate" in pure user-space code when the deployment system has
 no `sys_batch` available.  `include/linux/batch.h` has such an emulator
 activated by `BATCH_EMUL` being set.
 
-Oh, and, as set up right now, it only works on Linux x86_64 for kernels in
+Oh, and, as set up right now, it only works on Linux x86\_64 for kernels in
 the late 4.* to present 5.* version ranges.  It might work on earlier 3.x
 versions, but I haven't tested it on such.  I hacked it up as a module that
 hijacks a syscall slot purely for my development convenience.  Usage should
