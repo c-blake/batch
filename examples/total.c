@@ -3,7 +3,7 @@
 #include <stdio.h>          /* fprintf, stderr */
 #include <string.h>         /* strerror() */
 #include <sys/mman.h>       /* PROT_* MAP_* */
-#include <sys/stat.h>       /* PROT_* MAP_* */
+#include <sys/stat.h>       /* struct stat */
 #include "linux/batch.h"    /* syscall_t, batch*|BATCH* macros */
 
 char *mapall(char *path, long *len, int *eno) { /* could take prot/flags/etc. */
