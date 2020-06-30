@@ -3,7 +3,14 @@
 #include <stdlib.h>      // malloc, free
 #include <string.h>      // strerror()
 #include <time.h>        // struct timespec, clock_* CLOCK_*
+#include <signal.h>      // signal SIGINT
 #include "linux/batch.h" // syscall_t, batch*|BATCH* macros
+
+long count;
+void sig(int signum) {
+	fprintf(stderr, "%ld buffers copiedn\n", count);
+	exit(0);
+}
 
 // Populate `c` with a `3*n` syscall program referring to `r` that does read-
 // write cycles until either `read()<=0`, `write()<=0`, or batch is exhausted.
@@ -32,12 +39,13 @@ int main(int argc, char *argv[]) {
 	syscall_t *calls = (syscall_t *)malloc(3*n * sizeof *calls);
 	if (!buf || !rets || !calls)
 		return 1;
+	signal(SIGINT, sig);            // Install sig() for SIGINT
 	mkRW(calls, rets, n, 0, 1, buf, len);
 	clock_gettime(CLOCK_MONOTONIC, &t0);
 	while (batch(rets, calls, 3*n, 0, 0) == 3*n - 1) {
-//XXX Could analyze rets for short writes/errs; Maybe print stuff, etc.
-//		for (int i = 0; i < 3*n; i++)
-//			fprintf(stderr, "ret%d: %ld\n", i, rets[i]);
+		count++;
+//XXX Analyze rets for short writes/errs; Maybe print stuff, etc.
+//		for (int i=0; i < 3*n; i++) fprintf(stderr, "ret%d: %ld\n", i, rets[i]);
         }
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	fprintf(stderr, "%ld ns\n",
