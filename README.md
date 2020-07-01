@@ -57,7 +57,9 @@ versions, but I haven't tested it on such.  I hacked it up as a module that
 hijacks a syscall slot purely for my development convenience.  Usage should
 be as easy as:
 ```
-cd module
+mkdir -p $HOME/s/bat
+git clone https://github.com/c-blake/batch $HOME/s/bat
+cd $HOME/s/bat/module
 ./build
 as-root insmod batch.ko
 cd ../examples; make
