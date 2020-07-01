@@ -1,5 +1,5 @@
 obj-m := batch.o
-EXTRA_CFLAGS := -I/u/cb/s/bat/include
+EXTRA_CFLAGS := -I$(HOME)/s/bat/include
 batch.o : scTab.h
 scTab.h:
 	grep -w sys_call_table /boot/System.map-`uname -r` | \
