@@ -1,0 +1,7 @@
+
+#!/bin/sh
+umask 022
+make scTab.h
+make -C/lib/modules/`uname -r`/build M=$PWD modules modules_install
+cd /lib/modules/`uname -r`
+depmod -a
