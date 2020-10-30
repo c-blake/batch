@@ -142,6 +142,7 @@ errRet: if (unlikely(copy_to_user((void *)ur0, krv, (i + 1) * sizeof(long))))
 	kfree(buf);
 	return i;
 }
+extern unsigned long __force_order __weak;
 #define store_cr0(x) asm volatile("mov %0,%%cr0" : "+r"(x), "+m"(__force_order))
 static void allow_writes(void) {
 	unsigned long cr0 = read_cr0(); clear_bit(16, &cr0); store_cr0(cr0);
