@@ -71,9 +71,8 @@ static inline long indirect_call(void *f, int argc, long *a)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
 #include "scTab.h"
-#else
-static void **scTab = 0;
 #endif
+static void **scTab = 0;
 static char block[1024] = { 0 }; /*XXX allow whitelist not block blacklist? */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
@@ -158,6 +157,8 @@ static int __init mod_init(void) {
 		       "Need CONFIG_KALLSYMS & CONFIG_KALLSYMS_ALL\n");
 		return -ENOSYS;
 	}
+#else
+	scTab = (void **)(smSCTab + ((char *)&system_wq - smSysWQ));
 #endif
 	sys_oldcall0 = scTab[__NR_batch];          /* save syscall */
 	memset(&block[0], 0, sizeof block);        /* maybe redundant. */
