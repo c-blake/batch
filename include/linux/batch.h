@@ -89,9 +89,15 @@ cont:		if (off < 0)
 }
 
 static int batch_emul_init(void) {      // Auto-detect unless $BATCH_EMUL..
+	static char *emul = "sys_batch Emul\n";
+	static char *real = "sys_batch Real\n";
+//        long write(int, char *, unsigned long);
 	char *getenv(const char *);     //..forces pure user-space emulation.
-	return !!getenv("BATCH_EMUL") ||
+	int r = !!getenv("BATCH_EMUL") ||
 	       (syscall(__NR_batch, (long *)0, (syscall_t *)0, 0, 0, 0) != 0);
+	if (getenv("BATCH_VERBOSE"))
+	    (void)(write(2, r ? emul : real, 15) || 0);
+	return r;
 }
 
 static inline long batch(long rets[], struct syscall calls[],

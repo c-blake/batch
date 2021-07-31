@@ -1,6 +1,7 @@
 #include <stdio.h>          // fprintf stderr
 #include <stdlib.h>         // calloc
 #include <time.h>           // timespec clock_gettime CLOCK_MONOTONIC
+#include <unistd.h>         // write
 
 long external(void);
 long (*dummy)(void) = external;
