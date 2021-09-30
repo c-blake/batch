@@ -1,3 +1,4 @@
 #!/bin/sh
-make scTab.h
-make -C/lib/modules/`uname -r`/build M=$PWD
+: ${kversion:=`uname -r`}
+make V=$kversion scTab.h
+make -C/lib/modules/$kversion/build M=$PWD V=$kversion
