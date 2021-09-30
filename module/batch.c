@@ -12,6 +12,9 @@
 #else
 #	include <linux/sched/signal.h>
 #endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5,14,0)
+#  define __NR_syscall_max NR_syscalls
+#endif
 
 MODULE_DESCRIPTION("Generic batch system call API");
 MODULE_AUTHOR("Charles Blake <charles.l.blake2@gmail.com>");
