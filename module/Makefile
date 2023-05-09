@@ -1,5 +1,5 @@
 obj-m := batch.o
-EXTRA_CFLAGS := -I$M/../include
+EXTRA_CFLAGS := -I$M/../include -Wno-error
 batch.o : scTab.h
 
 ifndef V
