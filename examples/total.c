@@ -12,20 +12,21 @@ char *mapall(char *path, long *len, int *eno) { /* could take prot/flags/etc. */
 	long        ret[8], r, fdAddr=(long)&ret[0], szAddr=(long)&st.st_size;
 	syscall_t   b[8] = {
 	    scall3(open , -1,0,0, path, O_RDONLY, 0),
-	    scall2(wdcpy, -1,0,0, &b[2].arg[0], fdAddr),
+	    scall2(wdcpy, -1,0,0, &b[3].arg[0], fdAddr), /* fd for fstat */
+	    scall2(wdcpy, -1,0,0, &b[7].arg[0], fdAddr), /* fd for close */
 	    scall2(fstat, +3,0,0, 0, &st),      /* fail => skip cpy,cpy,mmap */
-	    scall2(wdcpy, -1,0,0, &b[5].arg[1], szAddr),
-	    scall2(wdcpy, -1,0,0, &b[5].arg[4], fdAddr),
+	    scall2(wdcpy, -1,0,0, &b[6].arg[1], szAddr),
+	    scall2(wdcpy, -1,0,0, &b[6].arg[4], fdAddr),
 	    scall6(mmap , -1,0,0, 0, 0, PROT_READ, MAP_SHARED, 0, 0),
-	    scall2(wdcpy, -1,0,0, &b[7].arg[0], fdAddr),
 	    scall1(close, -1,0,0, 0) };
 	if ((r = batch(ret, b, 8, 0, 0)) < 7) { /* rval is highest done INDEX */
+		close(ret[0]);  /* close since batch didn't: fstat|mmap fail */
 		if (eno) *eno = -ret[r];
 		return (char *)-1;
 	}
 	if (len)
 		*len = st.st_size;
-	return (char *)ret[5];
+	return (char *)ret[6];
 }
 
 int sum(char *buf, long len) {
