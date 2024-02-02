@@ -37,7 +37,7 @@ Another example is file tree walking (ftw) when user code needs file metadata
 stat's are not.  `du` is a classic example here.  In personal timings, I see
 ~1.3x speed-ups for [`mdu.c`](examples/mdu.c) over `BATCH_EMUL=1 mdu` (and ~1.7x
 speed-ups vs GNU `du` since the latter probably uses an `ftw` more expensive
-than [`ftw`](examples/ftw.c) to support tree depth unbounded by open fd limits).
+than [`ftw.c`](examples/ftw.c) to do tree depths unbounded by open fd limits).
 
 Another natural example is "path search" wherein a user program attempts
 several-to-many easily pre-computed paths, stopping at the first one which
