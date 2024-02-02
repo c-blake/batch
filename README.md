@@ -31,13 +31,13 @@ This kind of interface is easy to "emulate" in pure user-space code when the
 deployment system has no `sys_batch` available.  `include/linux/batch.h` has
 such an emulator activated by `BATCH_EMUL` being set.
 
-That is fairly abstract.  A demo [`total.c`](`examples/total.c`) may help.
+That is fairly abstract.  A demo [`total.c`](examples/total.c) may help.
 Another example is file tree walking (ftw) when user code needs file metadata
 (sizes, times, owners, ..).  `getdents64` is already a batch interface, but the
 stat's are not.  `du` is a classic example here.  In personal timings, I see
 ~1.3x speed-ups for [`mdu.c`](examples/mdu.c) over `BATCH_EMUL=1 mdu` (and ~1.7x
 speed-ups vs GNU `du` since the latter probably uses an `ftw` more expensive
-than [`ftw`](examples/mdu.c) to support tree depth unbounded by open fd limits).
+than [`ftw`](examples/ftw.c) to support tree depth unbounded by open fd limits).
 
 Another natural example is "path search" wherein a user program attempts
 several-to-many easily pre-computed paths, stopping at the first one which
