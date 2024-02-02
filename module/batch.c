@@ -76,7 +76,7 @@ static inline long indirect_call(void *f, int argc, long *a)
 #include "scTab.h"
 #endif
 static void **scTab = 0;
-static char block[1024] = { 0 }; /*XXX allow whitelist not block blacklist? */
+static char deny[1024] = { 0 }; /*XXX Do pass not deny list? */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 asmlinkage long sys_batch(const struct pt_regs *regs)
@@ -125,7 +125,7 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long nc
 			goto cont;
 		}
 		if (unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
-		             block[c->nr] || c->argc > 6 || !(f = scTab[c->nr])))
+		             deny[c->nr] || c->argc > 6 || !(f = scTab[c->nr])))
 			{ krv[i] = -ENOSYS; goto errRet; }
 		r = krv[i] = indirect_call(f, c->argc, c->arg);
 		if ((unsigned long)r > 18446744073709547520ULL) // -4096 < r < 0
@@ -153,7 +153,7 @@ static void disallow_writes(void) {
 	unsigned long cr0 = read_cr0(); set_bit(16, &cr0); store_cr0(cr0);
 }
 void *sys_oldcall0;         /* Likely sys_ni_syscall, but save/restore anyway */
-static int __init mod_init(void) {
+static int __init mod_init(void) {      /* install sys_batch */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5,7,0)
 	if (!(scTab = (void **)kallsyms_lookup_name("sys_call_table"))) {
 		printk(KERN_ERR "batch: cannot find sys_call_table; "
@@ -164,18 +164,17 @@ static int __init mod_init(void) {
 	scTab = (void **)(smSCTab + ((char *)&system_wq - smSysWQ));
 #endif
 	sys_oldcall0 = scTab[__NR_batch];          /* save syscall */
-	memset(&block[0], 0, sizeof block);        /* maybe redundant. */
-	block[__NR_batch] = block[__NR_execve] = block[__NR_vfork] /*XXX*/ = 1;
-	allow_writes();
-	scTab[__NR_batch] = sys_batch;             /* install sys_batch */
-	disallow_writes();
+	memset(&deny[0], 0, sizeof deny);        /* maybe redundant. */
+	deny[__NR_batch]=deny[__NR_execve]=deny[__NR_clone]=deny[__NR_vfork]=1;
+#ifdef __NR_clone3
+	deny[__NR_clone3] = 1;
+#endif __NR_clone3
+	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
 	printk(KERN_INFO "batch: installed as %d\n", __NR_batch);
 	return 0;
 }
-static void __exit mod_cleanup(void) {
-	allow_writes();
-	scTab[__NR_batch] = sys_oldcall0;          /* restore syscall */
-	disallow_writes();
+static void __exit mod_cleanup(void) {  /* restore syscall table */
+	allow_writes(); scTab[__NR_batch] = sys_oldcall0; disallow_writes();
 	printk(KERN_INFO "batch: removed\n");
 }
 module_init(mod_init);
