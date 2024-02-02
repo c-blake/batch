@@ -34,10 +34,6 @@ struct dent {
 };
 typedef struct dent dent_t;
 
-static inline int gdents(int fd, struct dent *buf, size_t len) {
-	return syscall(__NR_getdents64, fd, buf, len);
-}
-
 #define BUFSZ 4096
 #define DENT_FOREACH(de, buf, n) \
 	for (de = (dent_t *) buf; (char *) de < buf + n; \
