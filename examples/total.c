@@ -8,25 +8,33 @@
 
 char *mapall(char *path, long *len, int *eno) { /* could take prot/flags/etc. */
 	struct stat st;
-	/* Can init ret[] to -4095 (greatest abs errno) which is impossible */
-	long        ret[8], r, fdAddr=(long)&ret[0], szAddr=(long)&st.st_size;
-	syscall_t   b[8] = {
-	    scall3(open , -1,0,0, path, O_RDONLY, 0),
-	    scall2(wdcpy, -1,0,0, &b[3].arg[0], fdAddr), /* fd for fstat */
-	    scall2(wdcpy, -1,0,0, &b[7].arg[0], fdAddr), /* fd for close */
-	    scall2(fstat, +3,0,0, 0, &st),      /* fail => skip cpy,cpy,mmap */
-	    scall2(wdcpy, -1,0,0, &b[6].arg[1], szAddr),
-	    scall2(wdcpy, -1,0,0, &b[6].arg[4], fdAddr),
-	    scall6(mmap , -1,0,0, 0, 0, PROT_READ, MAP_SHARED, 0, 0),
-	    scall1(close, -1,0,0, 0) };
-	if ((r = batch(ret, b, 8, 0, 0)) < 7) { /* rval is highest done INDEX */
-		close(ret[0]);  /* close since batch didn't: fstat|mmap fail */
-		if (eno) *eno = -ret[r];
+	/* Might also init ret[] to impossible -4095 (greatest abs errno) */
+	long        ret[10]={0}, fdAdr=(long)&ret[0], szAdr=(long)&st.st_size,r;
+	syscall_t   b[10] = {
+	/*0*/scall3(open , -1,0,0, path, O_RDONLY, 0),   // get fd
+	/*1*/scall2(wdcpy, -1,0,0, &b[4].arg[0], fdAdr), // ->fstat
+	/*2*/scall2(wdcpy, -1,0,0, &b[8].arg[0], fdAdr), // ->close post mapFail
+	/*3*/scall2(wdcpy, -1,0,0, &b[9].arg[0], fdAdr), // ->close post mapOk
+	/*4*/scall2(fstat, +3,0,0, 0, &st),              // <0 =>skip cp,cp,mmap
+	/*5*/scall2(wdcpy, -1,0,0, &b[7].arg[1], szAdr), // sz to mmap
+	/*6*/scall2(wdcpy, -1,0,0, &b[7].arg[4], fdAdr), // fd to mmap
+	/*7*/scall6(mmap ,  0,1,1, 0, 0, PROT_READ, MAP_SHARED, 0, 0),
+	/*8*/scall1(close, -1,-1,-1, 0),   // -1s: Always Exit; For the < 9 test
+	/*9*/scall1(close, -1,0,0, 0) };   // Test ret[9] in user space
+	if ((r = batch(ret, b, 10, 0, 0)) < 9) { // rval is highest done INDEX
+		if (eno) {
+			while (r > 0 && ret[r] >= 0) r--;
+			*eno = -ret[r];
+		}
 		return (char *)-1;
 	}
+	if (ret[9] < 0) {       // If all >=0 but final close, re-try the close.
+		*eno = -ret[9]; // Like fstat fail, this can only occur on odd/
+		close(ret[0]);  // remote FSes. This leaks like close-fail post
+	}                       // fail-mmap, but it's all we can really do.
 	if (len)
 		*len = st.st_size;
-	return (char *)ret[6];
+	return (char *)ret[7];
 }
 
 int sum(char *buf, long len) {
