@@ -51,23 +51,23 @@ automatically and even auto-convert.  On the source side this is not so
 different from auto-vectorization.  The target language is also not so far
 from an assembly language with no backward jumping.
 
-Oh, and, as set up right now, it only works on Linux x86\_64 for kernels in
-the late 4.* to present 6.* version ranges.  It might work on earlier 3.x
-versions, but I haven't tested it on such.  I hacked it up as a module that
-hijacks a syscall slot purely for my development convenience.  Usage should
-be as easy as:
+Oh, and, as set up right now, it only works on Linux x86\_64 for kernels in the
+late 4.* to present 6.* version ranges.  It might work on earlier 3.x versions,
+but I haven't tested it on such.  For my development convenience, I hacked it up
+as a module hijacking the `afs_syscall` slot.  Usage should be as easy as:
+
 ```
-mkdir -p $HOME/s/bat
 git clone https://github.com/c-blake/batch $HOME/s/bat
-cd $HOME/s/bat/module
-./build
+cd $HOME/s/bat/module; ./build
 as-root insmod batch.ko
 cd ../examples; make
 ./mdu
 BATCH_EMUL=1 ./mdu
 du -sbl
 ```
+You can e.g. run `strace ./mdu` to see if `afs_syscall` is being used.
+
 At present, I would not recommend deploying this on a system with untrusted
-user code.  The block list is obviously incomplete, and it hasn't been very
-vetted for security implications.  It just seemed worth sharing/getting
-feedback upon (though I expect to hear only crickets).
+user code.  The deny list is obviously incomplete and hasn't been vetted for
+security implications or interactions with syscall auditing.  It seemed worth
+sharing/getting feedback upon.
