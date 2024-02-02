@@ -52,7 +52,7 @@ different from auto-vectorization.  The target language is also not so far
 from an assembly language with no backward jumping.
 
 Oh, and, as set up right now, it only works on Linux x86\_64 for kernels in
-the late 4.* to present 5.* version ranges.  It might work on earlier 3.x
+the late 4.* to present 6.* version ranges.  It might work on earlier 3.x
 versions, but I haven't tested it on such.  I hacked it up as a module that
 hijacks a syscall slot purely for my development convenience.  Usage should
 be as easy as:
