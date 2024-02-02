@@ -22,16 +22,16 @@ char *mapall(char *path, long *len, int *eno) { /* could take prot/flags/etc. */
 	/*8*/scall1(close, -1,-1,-1, 0),   // -1s: Always Exit; For the < 9 test
 	/*9*/scall1(close, -1,0,0, 0) };   // Test ret[9] in user space
 	if ((r = batch(ret, b, 10, 0, 0)) < 9) { // rval is highest done INDEX
-		if (eno) {
+		if (eno) {      // Might instead return all of ret[]|A thinning
 			while (r > 0 && ret[r] >= 0) r--;
-			*eno = -ret[r];
-		}
+			*eno = -ret[r];     // but the call instigating exit..
+		}                           //..is not a bad simulation.
 		return (char *)-1;
 	}
 	if (ret[9] < 0) {       // If all >=0 but final close, re-try the close.
 		*eno = -ret[9]; // Like fstat fail, this can only occur on odd/
-		close(ret[0]);  // remote FSes. This leaks like close-fail post
-	}                       // fail-mmap, but it's all we can really do.
+		close(ret[0]);  //..remote FSes. This leaks like close-fail post
+	}                       //..fail-mmap, but it's all we can really do.
 	if (len)
 		*len = st.st_size;
 	return (char *)ret[7];
