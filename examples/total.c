@@ -4,13 +4,13 @@
 #include <string.h>         /* strerror() */
 #include <sys/mman.h>       /* PROT_* MAP_* */
 #include <sys/stat.h>       /* struct stat */
-#include "linux/batch.h"    /* syscall_t, batch*|BATCH* macros */
+#include "linux/batch.h"    /* syscall_t, scall<N> macros, batch */
 
 char *mapall(char *path, long *len, int *eno) { /* could take prot/flags/etc. */
 	struct stat st;
 	/* Might also init ret[] to impossible -4095 (greatest abs errno) */
 	long        ret[10]={0}, fdAdr=(long)&ret[0], szAdr=(long)&st.st_size,r;
-	syscall_t   b[10] = {
+	syscall_t   b[10] = {   /* 0  1  2  3  4  5 .arg[]s */
 	/*0*/scall3(open , -1,0,0, path, O_RDONLY, 0),   // get fd
 	/*1*/scall2(wdcpy, -1,0,0, &b[4].arg[0], fdAdr), // ->fstat
 	/*2*/scall2(wdcpy, -1,0,0, &b[8].arg[0], fdAdr), // ->close post mapFail
