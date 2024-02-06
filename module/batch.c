@@ -96,15 +96,15 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long nc
 	              aEnd = uc0 + ncall * sizeof(syscall_t), kr0, kc0;
 	syscall_t    *calls = (syscall_t *)uc0, *buf = NULL;
 	gfp_t         gfp_flags = GFP_KERNEL | ___GFP_ZERO;
-        if (ncall == 0)
-            return 0;
+	if (ncall == 0)
+		return 0;
 	if (!(buf = kmalloc(ncall * (sizeof *krv + sizeof *calls), gfp_flags)))
 		return -ENOMEM;
 	krv = (long *)(kr0 = (unsigned long)buf);
 	kc0 = kr0 + ncall * sizeof(long);
 	if (unlikely(copy_from_user((void *)kc0, calls, ncall * sizeof *calls)))
-		{ krv[i] = -EFAULT; goto errRet; }
-	for (/**/; i < ncall; i += 1 + off) {
+		{ kfree(buf); return -EFAULT; }
+	for (/**/; i < ncall && off >= 0; i += 1 + off) {
 		void      *f;
 		syscall_t *c = (syscall_t *)(kc0 + i * sizeof *c);
 		if (c->nr == __NR_wdcpy) {
@@ -120,22 +120,16 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long nc
 			else if (unlikely(put_user(tmp, (long *)c->arg[0])))
 				{ krv[i] = -EFAULT; goto errRet; }
 			continue;
-		} else if (c->nr == __NR_jmpfwd) {
-			off = c->jumpFail;
-			goto cont;
-		}
-		if (unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
-		             deny[c->nr] || c->argc > 6 || !(f = scTab[c->nr])))
-			{ krv[i] = -ENOSYS; goto errRet; }
-		r = krv[i] = indirect_call(f, c->argc, c->arg);
+		} //NOTE: any bogus != __NR_wdcpy can encode jump forward
+		r = krv[i] = unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
+		              deny[c->nr] || c->argc > 6 || !(f = scTab[c->nr]))
+		              ? -ENOSYS : indirect_call(f, c->argc, c->arg);
 		if ((unsigned long)r > 18446744073709547520ULL) // -4096 < r < 0
 			off = c->jumpFail;
 		else if (r > 0)
 			off = c->jumpPos;
 		else
 			off = c->jump0;
-cont:		if (off < 0)
-			break;
 	}
 	if (i >= ncall)
 		i--;

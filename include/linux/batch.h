@@ -10,17 +10,16 @@
   in the passed syscall_t[] slots.  Backward jumps aka loops are disallowed due
   to halting concerns.  Any out of bounds jump terminates the batch call.
 
-  sys_batch adds two fake system calls wdcpy & jmpfwd - inlined in the dispatch
-  loop.  wdcpy takes two user space addresses and copies a register-sized word.
-  Combined with forward jumps, this can be used to "chain" bundles of syscalls
-  together, e.g., appropriate combinations of (open, fstat, wdcpy, mmap, close)
-  and wdcpy's to mmap an whole file in one user-kernel crossing.  Arithmetic &
-  boolean logic is not yet supported (but could be added as new fake syscalls).
+  sys_batch adds a fake system, wdcpy - inlined in the dispatch loop - which
+  takes 2 user space addresses and copies 1 register-sized word.  Combined with
+  forward jumps, this can be used to "chain" bundles of syscalls together, e.g.,
+  appropriate combinations of (open, fstat, wdcpy, mmap, close) and wdcpy's to
+  mmap an whole file in one user-kernel crossing.  Arithmetic & boolean logic is
+  not yet supported (but could be added as new fake syscalls).
 */
 #include <asm/unistd.h>                 /* __NR_* */
 #define __NR_batch  __NR_afs_syscall    /* Hijack Andrew FS call slot for now */
 #define __NR_wdcpy  -2                  /* word copy: resolved in sys_batch */
-#define __NR_jmpfwd -3                  /* jump forward: resolved in sys_batch */
 
 typedef struct syscall {
 	short nr,                       /* syscall number */
@@ -58,14 +57,11 @@ static inline long batchE(long rets[], struct syscall calls[],
 	long       r = 0, off = 0;
 	if (ncall == 0)
 		return 0;
-	for (i = 0; i < ncall; i += 1 + off) {
+	for (i = 0; i < ncall && off >= 0; i += 1 + off) {
 		c = &calls[i];
 		if (c->nr == __NR_wdcpy) {
 			*(long *)(c->arg[0]) = *(long *)(c->arg[1]);
 			continue;
-		} else if (c->nr == __NR_jmpfwd) {
-			off = c->jumpFail;
-			goto cont;
 		}                       // |-- __NR_syscall_max only in KERNEL
 		if (c->nr < 0 || c->nr > 1024 || c->argc > 6) {
 			rets[i] = -ENOSYS;
@@ -82,21 +78,19 @@ static inline long batchE(long rets[], struct syscall calls[],
 			off = c->jump0;
 			rets[i] = 0;
 		}
-cont:		if (off < 0)
-			return i;
 	}
-	return ncall - 1;
+	return i < ncall ? i : i - 1;
 }
 
 static int batch_emul_init(void) {      // Auto-detect unless $BATCH_EMUL..
 	static char *emul = "sys_batch Emul\n";
 	static char *real = "sys_batch Real\n";
-//        long write(int, char *, unsigned long);
+//	long write(int, char *, unsigned long);
 	char *getenv(const char *);     //..forces pure user-space emulation.
 	int r = !!getenv("BATCH_EMUL") ||
 	       (syscall(__NR_batch, (long *)0, (syscall_t *)0, 0, 0, 0) != 0);
 	if (getenv("BATCH_VERBOSE"))
-	    (void)(write(2, r ? emul : real, 15) || 0);
+		(void)(write(2, r ? emul : real, 15) || 0);
 	return r;
 }
 
