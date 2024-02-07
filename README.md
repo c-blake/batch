@@ -66,7 +66,7 @@ du -sbl
 ```
 You can e.g. run `strace ./mdu` to see if `afs_syscall` is being used.  You may
 need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or at least reboot
-with `nokalsr=1` on the kernel command line to get the module inserted.
+with `nokaslr=1` on the kernel command line to get the module inserted.
 
 At present, I would not recommend deploying this on a system with untrusted
 user code.  The deny list hasn't been vetted for security implications or
