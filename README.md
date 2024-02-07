@@ -20,12 +20,10 @@ Not all system call targets are allowed since call-return protocols vary from
 the usual, e.g.  `fork`, `exec`, or `batch` itself (to prevent loops spelled as
 recursion).  Blocked system calls get `-ENOSYS` in the return value slot.
 
-Two "fake" syscalls are implemented in-line in the sub-call dispatch loop: word
-copy and unconditional forward jumps.  The copy lets you chain outputs of one
-call to inputs of subsequent calls.  The unconditional jump can skip blocks
-meant as an error/alternate path earlier (and strictly is not needed since it is
-equivalent to any unimplemented call).  This allows representing a great many
-mini-call-programs.
+One "fake" syscall is implemented in-line in the sub-call dispatch loop: word
+copy to allow chaining outputs of one call to inputs of subsequent calls.  Any
+unimplemented/always failing call can skip blocks meant as an error/alternate
+paths.  This allows representing a great many multi-call-programs.
 
 This kind of interface is easy to "emulate" in pure user-space code when the
 deployment system has no `sys_batch` available.  `include/linux/batch.h` has
