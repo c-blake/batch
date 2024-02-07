@@ -1,6 +1,5 @@
 #include <linux/kernel.h>               /* Basic Linux module headers */
 #include <linux/module.h>
-#include <linux/kallsyms.h>             /* kallsyms_lookup_name, __NR_* */
 #include <generated/asm-offsets.h>      /* __NR_syscall_max */
 #include <linux/batch.h>                /* struct syscall, __NR_batch */
 #include <linux/uaccess.h>              /* copy_from_user put_user */
@@ -74,7 +73,8 @@ static inline long indirect_call(void *f, int argc, long *a)
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
-#include "scTab.h"
+#include <linux/kprobes.h>
+static struct kprobe kp = { .symbol_name = "kallsyms_lookup_name" };
 #endif
 static void **scTab = 0;
 static char deny[1024] = { 0 }; /*XXX Do pass not deny list? */
@@ -149,15 +149,21 @@ static void disallow_writes(void) {
 }
 void *sys_oldcall0;         /* Likely sys_ni_syscall, but save/restore anyway */
 static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,7,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+	typedef unsigned long (*fp_t)(const char *name);
+	int rkp_ret;
+	if ((rkp_ret = register_kprobe(&kp)) < 0) {
+		printk(KERN_ERR "batch: cannot register_kprobe; Need "
+		       "CONFIG_KPROBES, _KALLSYMS, & _KALLSYMS_ALL\n");
+		return rkp_ret;
+	}
+	fp_t kallsyms_lookup_name = (fp_t) kp.addr; unregister_kprobe(&kp);
+#endif
 	if (!(scTab = (void **)kallsyms_lookup_name("sys_call_table"))) {
 		printk(KERN_ERR "batch: cannot find sys_call_table; "
 		       "Need CONFIG_KALLSYMS & CONFIG_KALLSYMS_ALL\n");
 		return -ENOSYS;
 	}
-#else
-	scTab = (void **)(smSCTab + ((char *)&system_wq - smSysWQ));
-#endif
 	sys_oldcall0 = scTab[__NR_batch];      /* save syscall */
 	memset(&deny[0], 0, sizeof deny);      /* maybe redundant */
 	deny[__NR_batch]=deny[__NR_execve]=deny[__NR_clone]=deny[__NR_vfork]=1;

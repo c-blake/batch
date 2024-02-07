@@ -1,4 +1,3 @@
 #!/bin/sh
 : ${kversion:=`uname -r`}
-make V=$kversion scTab.h
 make -C/lib/modules/$kversion/build M=$PWD V=$kversion

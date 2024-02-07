@@ -1,7 +1,6 @@
 #!/bin/sh
 : ${kversion:=`uname -r`}
 umask 022
-make V=$kversion scTab.h
 make -C/lib/modules/$kversion/build M=$PWD V=$kversion modules modules_install
 cd /lib/modules/$kversion
 depmod -a
