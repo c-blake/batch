@@ -10,12 +10,12 @@
   in the passed syscall_t[] slots.  Backward jumps aka loops are disallowed due
   to halting concerns.  Any out of bounds jump terminates the batch call.
 
-  sys_batch adds a fake system, wdcpy - inlined in the dispatch loop - which
-  takes 2 user space addresses and copies 1 register-sized word.  Combined with
-  forward jumps, this can be used to "chain" bundles of syscalls together, e.g.,
-  appropriate combinations of (open, fstat, wdcpy, mmap, close) and wdcpy's to
-  mmap an whole file in one user-kernel crossing.  Arithmetic & boolean logic is
-  not yet supported (but could be added as new fake syscalls).
+  sys_batch adds a fake syscall, wdcpy - in-lined in the dispatch loop - which
+  takes 2 user space addresses and copies 1 register-sized word.  This can be
+  used to "chain" bundles of syscalls, e.g., appropriate combinations of (open,
+  fstat, wdcpy, mmap, close) & wdcpy's to mmap an whole file in one user-kernel
+  crossing.  Arithmetic & boolean logic is not supported (but could be added as
+  new fake syscalls or wdcpy args could encode some basic stuff).
 */
 #include <asm/unistd.h>                 /* __NR_* */
 #define __NR_batch  __NR_afs_syscall    /* Hijack Andrew FS call slot for now */
@@ -32,6 +32,7 @@ typedef struct syscall {
 
 #ifndef __KERNEL__
 #include <errno.h>                      /* needed by syscall macro */
+static char deny[1024] = { 0 };         /*XXX Do a pass not a deny list? */
 #ifndef syscall
 #   include <unistd.h>                  /* syscall() */
 #endif
@@ -61,13 +62,11 @@ static inline long batchE(long rets[], struct syscall calls[],
 		c = &calls[i];
 		if (c->nr == __NR_wdcpy) {
 			*(long *)(c->arg[0]) = *(long *)(c->arg[1]);
+			off = 0;
 			continue;
-		}                       // |-- __NR_syscall_max only in KERNEL
-		if (c->nr < 0 || c->nr > 1024 || c->argc > 6) {
-			rets[i] = -ENOSYS;
-			return i;
-		}
-		r = indirect_call(c->nr, c->argc, c->arg);
+		} //NOTE: any bogus != __NR_wdcpy can encode jump forward
+		r = (c->nr < 0 || c->nr > 1024 || deny[c->nr] || c->argc > 6) ?
+		    -ENOSYS : indirect_call(c->nr, c->argc, c->arg);
 		if ((unsigned long)r > 18446744073709547520ULL) { // -4096 < r < 0
 			off = c->jumpFail;
 			rets[i] = -errno;
@@ -91,6 +90,10 @@ static int batch_emul_init(void) {      // Auto-detect unless $BATCH_EMUL..
 	       (syscall(__NR_batch, (long *)0, (syscall_t *)0, 0, 0, 0) != 0);
 	if (getenv("BATCH_VERBOSE"))
 		(void)(write(2, r ? emul : real, 15) || 0);
+	deny[__NR_batch]=deny[__NR_execve]=deny[__NR_clone]=deny[__NR_vfork]=1;
+#ifdef __NR_clone3
+	deny[__NR_clone3] = 1;
+#endif /* __NR_clone3 */
 	return r;
 }
 
