@@ -12,9 +12,9 @@ does.
 
 Only minimal control flow in-kernel is given so work is trivially loop-free &
 bounded by batch size.  Specifically, a batch can only jump forward by 1 or more
-array slots in the array of system calls either unconditionally or trivalently
-on returns `{ -4096 < r < 0, == 0, or > 0 }`.  Said returns conventionally mean
-usually { error, success/done/EOF, and more-work-or answer} conditions.
+array slots in the array of system calls trivalently on returns `{ < 0, == 0, >
+0 }`.  Said returns conventionally mean usually { error, success/done/EOF, and
+more-work-or answer} conditions.
 
 Not all system call targets are allowed since call-return protocols vary from
 the usual, e.g.  `fork`, `exec`, or `batch` itself (to prevent loops spelled as
@@ -25,9 +25,10 @@ copy to allow chaining outputs of one call to inputs of subsequent calls.  Any
 unimplemented/always failing call can skip blocks meant as an error/alternate
 paths.  This allows representing a great many multi-call-programs.
 
-This kind of interface is easy to "emulate" in pure user-space code when the
+This kind of interface is easy to "emulate" in pure user-space code when a
 deployment system has no `sys_batch` available.  `include/linux/batch.h` has
-such an emulator activated by `BATCH_EMUL` being set.
+such an emulator activated by `BATCH_EMUL` being set.  Such emulation is also
+useful to benchmark improvement due to the system call.
 
 That is fairly abstract.  A demo [`total.c`](examples/total.c) may help.
 Another example is file tree walking (ftw) when user code needs file metadata
@@ -68,6 +69,6 @@ need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or at least reboot
 with `nokalsr=1` on the kernel command line to get the module inserted.
 
 At present, I would not recommend deploying this on a system with untrusted
-user code.  The deny list is obviously incomplete and hasn't been vetted for
-security implications or interactions with syscall auditing.  It seemed worth
-sharing/getting feedback upon.
+user code.  The deny list hasn't been vetted for security implications or
+interactions with syscall auditing.  It seemed worth sharing/getting feedback
+upon.
