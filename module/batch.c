@@ -42,6 +42,7 @@ typedef asmlinkage long (*F5_t)(long, long, long, long, long);
 typedef asmlinkage long (*F6_t)(long, long, long, long, long, long);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 static inline long indirect_call(void *f, int argc, long *a)
 {	/* x64 syscall calling convention changed @4.17 to use struct pt_regs */
 	struct pt_regs regs;
@@ -173,3 +174,4 @@ static void __exit mod_cleanup(void) {  /* restore sys_call_table[__NR_batch] */
 }
 module_init(mod_init);
 module_exit(mod_cleanup);
+MODULE_LICENSE("GPL");
