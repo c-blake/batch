@@ -6,9 +6,9 @@ crossing as possible.  Batching is one approach.  In the Linux user-kernel
 setting, privilege checking and such is already done inside system call code.
 So, security implications should be minimal and there should be no need to
 restrict code uploaders to be privileged or verify code like EBPF.  All we need
-to do to add this to Linux is decide on a convenient API to over an array of
-system calls storing into an array of return values.  That's what this package
-does.
+to do to add this to Linux is decide on a convenient API to loop over an array
+of system calls storing into an array of return values.  That's what this
+package does.
 
 Only minimal control flow in-kernel is given so work is trivially loop-free &
 bounded by batch size.  Specifically, a batch can only jump forward by 1 or more
