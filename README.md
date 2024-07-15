@@ -1,3 +1,9 @@
+While adding a new syscall was one of the original marketing points of the Linux
+loadable module system, Linux 6.9 made syscalls just a big `switch()` defeating
+using modules.  At the low cost of one fd per process, this idea could become a
+device driver (e.g. writing a batch struct to run), but that is pending work &
+may have very different performance characteristics.
+
 # batch: Generic Linux System Call Batching
 
 Kernel <-> user crossings are expensive.  Across any such boundary (IPC or
