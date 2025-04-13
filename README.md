@@ -1,8 +1,12 @@
-While adding a new syscall was one of the original marketing points of the Linux
-loadable module system, Linux 6.9 made syscalls just a big `switch()` defeating
-using modules.  At the low cost of one fd per process, this idea could become a
-device driver (e.g. writing a batch struct to run), but that is pending work &
-may have very different performance characteristics.
+While adding new syscalls was an original marketing point of the Linux loadable
+module system, Linux 6.9 made syscalls just a big `switch()` defeating using
+modules, though there is still `long x64_sys_call(const struct pt_regs *regs,
+unsigned int nr);` for indirect calls.  At a low, but annoying cost of one fd
+per process, this idea could become a device driver or VFS (e.g. writing a batch
+struct to run), but that is pending work & may have different performance
+characteristics.  There is also [a kprobes
+approach](https://stackoverflow.com/questions/78599971/hooking-syscall-by-modifying-sys-call-table-does-not-work/78607015#78607015)
+and probably other ideas.
 
 # batch: Generic Linux System Call Batching
 
