@@ -181,3 +181,10 @@ static void __exit mod_cleanup(void) {  /* restore sys_call_table[__NR_batch] */
 module_init(mod_init);
 module_exit(mod_cleanup);
 MODULE_LICENSE("GPL");
+/*
+  A way forward may be to hook afs_syscall(2) by kprobes, but call indirectly by
+    `long x64_sys_call(const struct pt_regs *regs, unsigned int nr);`
+https://stackoverflow.com/questions/78599971/hooking-syscall-by-modifying-sys-call-table-does-not-work/78607015#78607015
+https://stackoverflow.com/questions/78693856/my-kernel-module-dont-hook-systems-calls-how-fix-that
+https://stackoverflow.com/questions/2103315/linux-kernel-system-call-hooking-example/72677965#72677965
+*/
