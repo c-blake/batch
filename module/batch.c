@@ -80,6 +80,7 @@ static void **scTab = 0;
 static char deny[1024] = { 0 }; /*XXX Do pass not deny list? */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+long sys_batch(const struct pt_regs *regs); /* prototype to silence warning */
 asmlinkage long sys_batch(const struct pt_regs *regs)
 {
 	unsigned long ur0   = regs->di;
@@ -139,6 +140,18 @@ errRet: if (unlikely(copy_to_user((void *)ur0, krv, (i + 1) * sizeof(long))))
 	kfree(buf);
 	return i;
 }
+
+static int ret_handle(struct kretprobe_instance *ri, struct pt_regs *reg) {
+	if (reg->si == __NR_batch)  // Might parent regs not always be in `di`?
+		regs_set_return_value(reg, sys_batch((struct pt_regs*)reg->di));
+	return 0;
+}
+
+struct kretprobe batch_kprobe = {
+	.kp.symbol_name = "__x64_sys_ni_syscall",
+	.handler = ret_handle, .maxactive = 32,
+};
+
 extern unsigned long __force_order __weak;
 #define store_cr0(x) asm volatile("mov %0,%%cr0" : "+r"(x), "+m"(__force_order))
 static void allow_writes(void) {
@@ -171,20 +184,23 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 	deny[__NR_clone3] = 1;
 #endif /* __NR_clone3 */
 	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
+	int err = register_kretprobe(&batch_kprobe);
+	if (err) {
+		pr_err("register_kprobe() failed: %d\n", err);
+		return err;
+	}
+#endif
 	printk(KERN_INFO "batch: installed as %d\n", __NR_batch);
 	return 0;
 }
 static void __exit mod_cleanup(void) {  /* restore sys_call_table[__NR_batch] */
 	allow_writes(); scTab[__NR_batch] = sys_oldcall0; disallow_writes();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
+	unregister_kretprobe(&batch_kprobe);
+#endif
 	printk(KERN_INFO "batch: removed\n");
 }
 module_init(mod_init);
 module_exit(mod_cleanup);
 MODULE_LICENSE("GPL");
-/*
-  A way forward may be to hook afs_syscall(2) by kprobes, but call indirectly by
-    `long x64_sys_call(const struct pt_regs *regs, unsigned int nr);`
-https://stackoverflow.com/questions/78599971/hooking-syscall-by-modifying-sys-call-table-does-not-work/78607015#78607015
-https://stackoverflow.com/questions/78693856/my-kernel-module-dont-hook-systems-calls-how-fix-that
-https://stackoverflow.com/questions/2103315/linux-kernel-system-call-hooking-example/72677965#72677965
-*/
