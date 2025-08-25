@@ -65,11 +65,10 @@ hijacking the `afs_syscall` slot.  Usage should be as easy as[^1]:
 ```
 git clone https://github.com/c-blake/batch $HOME/s/bat
 cd $HOME/s/bat/module; ./build
-as-root insmod batch.ko
-cd ../examples; make
-BATCH_VERBOSE=1 ./mdu
-BATCH_EMUL=1 ./mdu
-du -sbl
+as-root insmod batch.ko     # or modprobe batch
+cd ../examples; make unimpl
+BATCH_VERBOSE=1 ./unimpl    # should print "sys_batch Real\n" to stderr
+BATCH_EMUL=1 ./unimpl
 ```
 ## Checking if it works
 You can e.g. run `strace ./mdu` to see if `afs_syscall` is being used.  You may
@@ -77,13 +76,24 @@ need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or at least reboot
 with `nokaslr=1` on the kernel command line to get a 3rd party module inserted.
 You also (since Linux-5.7) need the `kprobes` facility activated.[^1]
 
-## A Final Caveat
+## Final Caveats
 This is at a proof-of-concept level presently to study performance.  It may not
 be advisable to deploy this on a system with untrusted user code.  E.g., the
 `deny` list hasn't been vetted for security implications or interactions with
-syscall auditing.  It seemed worth sharing/getting feedback upon.
+syscall auditing.  It seemed worth sharing/getting feedback upon.  Beyond this,
+the kprobes variant (needed as of Linux-6.9 when Linux ceased being extensible)
+***ONLY WORKS WITH KID SYSCALLS THAT DO NOT BLOCK ANYWHERE EVER*** like an
+unimplemented call.  Otherwise you get "BUG: scheduling while atomic:" kernel
+messages & oopses and can crash your system.  This is a very dynamic situation,
+though.  The above `unimpl` example changed to `mdu` works fine ***IF*** you
+first ensure all the dentries are cached.  Since this module is mostly about
+timing/API testing, and since in those cases the "hot" path is the one with
+primary interest in syscall overhead reduction, the module retains some utility.
 
 [^1]: At a low, but annoying cost of one fd per process, this idea could be done
 with a device driver or a VFS (e.g. write(2)ing batch structs to run), but that
 may have different performance characteristics.  It is most naturally viewed as
 a "meta-system-call".  An implementation reflecting this makes the most sense.
+So, this should evolve into a patch set against mainline Linux.  Then it will
+need building your own whole kernel just to try out.  Since almost all interest
+so far in this has been "fly by" interest, time pressure for that is not great.
