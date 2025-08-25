@@ -71,10 +71,10 @@ BATCH_VERBOSE=1 ./unimpl    # should print "sys_batch Real\n" to stderr
 BATCH_EMUL=1 ./unimpl
 ```
 ## Checking if it works
-You can e.g. run `strace ./mdu` to see if `afs_syscall` is being used.  You may
-need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or at least reboot
-with `nokaslr=1` on the kernel command line to get a 3rd party module inserted.
-You also (since Linux-5.7) need the `kprobes` facility activated.[^1]
+You can also run `strace ./unimpl` to see if `afs_syscall` is being used.  You
+may need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or reboot with
+`nokaslr=1` on the kernel command line to get a 3rd party module inserted.  You
+also (since Linux-5.7) need the `kprobes` facility activated.[^1]
 
 ## Final Caveats
 This is at a proof-of-concept level presently to study performance.  It may not
