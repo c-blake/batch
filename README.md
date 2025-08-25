@@ -85,5 +85,5 @@ syscall auditing.  It seemed worth sharing/getting feedback upon.
 
 [^1]: At a low, but annoying cost of one fd per process, this idea could be done
 with a device driver or a VFS (e.g. write(2)ing batch structs to run), but that
-may have different performance characteristics.  Since it is most naturally
-viewed as a "meta-system-call".
+may have different performance characteristics.  It is most naturally viewed as
+a "meta-system-call".  An implementation reflecting this makes the most sense.
