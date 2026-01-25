@@ -55,10 +55,10 @@ int main(int ac __attribute((unused)), char **av) {
 	long total = 0, len = 0;
 	char *p;
 	for (av++; *av; av++)
-	if ((p = mapall(*av, &len, &eno)) != (char *)-1)
-		total += sum(p, len);
-	else
-		fprintf(stderr, "sum: \"%s\": %s\n", *av, strerror(eno));
+		if ((p = mapall(*av, &len, &eno)) != (char *)-1)
+			total += sum(p, len);
+		else
+			fprintf(stderr,"sum: \"%s\": %s\n", *av, strerror(eno));
 	printf("grand total: %ld\n", total);
 	return 0;
 }
