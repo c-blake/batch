@@ -132,7 +132,9 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long nc
 			off = c->jumpPos;
 		else
 			off = c->jump0;
-	}
+		if (signal_pending(current)) /* Should go @top & do unambig ..*/
+			break;               /*..0-progress repr w/C wrapper..*/
+	}                                    /*..translating signal-halted. */
 	if (i >= ncall)
 		i--;
 errRet: if (unlikely(copy_to_user((void *)ur0, krv, (i + 1) * sizeof(long))))
@@ -179,10 +181,18 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 	}
 	sys_oldcall0 = scTab[__NR_batch];      /* save syscall */
 	memset(&deny[0], 0, sizeof deny);      /* maybe redundant */
-	deny[__NR_batch]=deny[__NR_execve]=deny[__NR_clone]=deny[__NR_vfork]=1;
+	deny[__NR_batch]=deny[__NR_clone]=deny[__NR_vfork]=deny[__NR_fork]=
+	deny[__NR_exit]=deny[__NR_exit_group]=deny[__NR_rt_sigreturn]=
+	deny[__NR_execve]=deny[__NR_kexec_load]=1;
 #ifdef __NR_clone3
 	deny[__NR_clone3] = 1;
 #endif /* __NR_clone3 */
+#ifdef __NR_execveat	/* Not much danger in uretprobe, reboot, ..*/
+	deny[__NR_execveat] = 1;
+#endif /* __NR_execveat */
+#ifdef __NR_kexec_file_load
+	deny[__NR_kexec_file_load] = 1;
+#endif /* __NR_kexec_file_load */
 	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
 	int err = register_kretprobe(&batch_kprobe);
