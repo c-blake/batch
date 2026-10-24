@@ -90,10 +90,15 @@ static int batch_emul_init(void) {      // Auto-detect unless $BATCH_EMUL..
 	       (syscall(__NR_batch, (long *)0, (syscall_t *)0, 0, 0, 0) != 0);
 	if (getenv("BATCH_VERBOSE"))
 		(void)(write(2, r ? emul : real, 15) || 0);
-	deny[__NR_batch]=deny[__NR_execve]=deny[__NR_clone]=deny[__NR_vfork]=1;
+	deny[__NR_batch]=deny[__NR_clone]=deny[__NR_vfork]=deny[__NR_fork]=
+	deny[__NR_exit]=deny[__NR_exit_group]=deny[__NR_rt_sigreturn]=
+	deny[__NR_kexec_load]=1;
 #ifdef __NR_clone3
 	deny[__NR_clone3] = 1;
 #endif /* __NR_clone3 */
+#ifdef __NR_kexec_file_load
+	deny[__NR_kexec_file_load] = 1;
+#endif /* __NR__kexec_file_load */
 	return r;
 }
 

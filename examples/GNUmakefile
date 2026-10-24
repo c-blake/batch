@@ -2,7 +2,7 @@
 
 ALL :=	t0call t1call tgetuid tbad1 tbad2 lstat-root fstat-0 getuids closes \
 	unimpl lstat-argvT lstat-argv total statx-argvT statx-argv lnct mdu \
-	dispOvrHd r0w1
+	dispOvrHd r0w1 bexecp
 
 all: $(ALL)
 clean: ; $(RM) $(ALL)
