@@ -12,7 +12,10 @@
 #	include <linux/sched/signal.h>
 #endif
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,14,0)
-#  define __NR_syscall_max NR_syscalls
+#  define __NR_syscall_max (NR_syscalls - 1)
+#endif
+#ifndef GFP_KERNEL_ACCOUNT
+#  define GFP_KERNEL_ACCOUNT GFP_KERNEL
 #endif
 
 MODULE_DESCRIPTION("Generic batch system call API");
@@ -86,62 +89,68 @@ asmlinkage long sys_batch(const struct pt_regs *regs)
 	unsigned long ur0   = regs->di;
 	unsigned long uc0   = regs->si;
 	unsigned long ncall = regs->dx;
-//	unsigned long flags = regs->r10;
-//	unsigned long size  = regs->r8;
+  	unsigned long flags = regs->r10;
+  	unsigned long size  = regs->r8;
 #else
-asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long ncall,
-        __attribute__((unused)) long flags, __attribute__((unused)) long size)
+asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0,
+			  unsigned long ncall, long flags, long size)
 {
 #endif
-	long          off = 0, *krv = NULL;
+	long          r = 0, off = 0, *krv = NULL;
 	unsigned long i = 0, urEnd = ur0 + ncall * sizeof(long),
 	              aEnd = uc0 + ncall * sizeof(syscall_t), kr0, kc0;
 	syscall_t    *calls = (syscall_t *)uc0, *buf = NULL;
-	gfp_t         gfp_flags = GFP_KERNEL | ___GFP_ZERO;
+	gfp_t         gfp_flags = GFP_KERNEL_ACCOUNT|__GFP_ZERO|__GFP_NOWARN;
 	char          d;
+	if (flags | size) return -EINVAL; /* ABI evolution placeholders */
 	if (ncall == 0)
 		return 0;
+	if (ncall > 4096) /* sizeof(syscall_t)=64=>288 KiB (w/512 KiB block) */
+		return -EINVAL;
 	if (!(buf = kmalloc(ncall * (sizeof *krv + sizeof *calls), gfp_flags)))
 		return -ENOMEM;
 	krv = (long *)(kr0 = (unsigned long)buf);
 	kc0 = kr0 + ncall * sizeof(long);
 	if (unlikely(copy_from_user((void *)kc0, calls, ncall * sizeof *calls)))
 		{ kfree(buf); return -EFAULT; }
-	for (/**/; i < ncall && off >= 0; i += 1 + off) {
+	for (/**/; i < ncall; i += 1 + off) {
 		void      *f;
 		syscall_t *c = (syscall_t *)(kc0 + i * sizeof *c);
 		if (c->nr == __NR_wdcpy) {
 			unsigned long tmp;               // Do *dst = *src
 			unsigned long src = (unsigned long)c->arg[1];
 			unsigned long dst = (unsigned long)c->arg[0];
-			if (ur0 <= src && src < urEnd)
+			if (ur0 <= src && src <= urEnd - sizeof(long))
 				tmp = *(unsigned long *)(kr0 + (src - ur0));
 			else if (unlikely(get_user(tmp, (long *)c->arg[1])))
 				{ krv[i] = -EFAULT; goto errRet; }
-			if (uc0 <= dst && dst < aEnd)
+			if (uc0 <= dst && dst <= aEnd - sizeof(long))
 				*(unsigned long *)(kc0 + (dst - uc0)) = tmp;
 			else if (unlikely(put_user(tmp, (long *)c->arg[0])))
 				{ krv[i] = -EFAULT; goto errRet; }
-			continue;
-		} //NOTE: any bogus != __NR_wdcpy can encode jump forward
-		krv[i] = unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
-		                  c->argc > 6 || !(f = scTab[c->nr])) ? -ENOSYS
+			off = 0;
+			continue; //NOTE: AnyBogus!=__NR_wdcpy encodes fwd jump
+		} // SpectreV1? array_index_nospec(c->nr, __NR_syscall_max + 1)
+		r = krv[i] = unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
+		         (unsigned)c->argc > 6 || !(f = scTab[c->nr])) ? -ENOSYS
 		  : !(d = deny[c->nr]) ? indirect_call(f, c->argc, c->arg)
 		  : d == 1 ? -ENOSYS :
 		    ({ long x = indirect_call(f, c->argc, c->arg);
 		       if (!x) goto execOk;   /* old mm gone: no copy_to_user */
 		       x; });                 /* failed exec: normal -errno */
-		if ((unsigned long)krv[i] > 18446744073709547520ULL) //-4096<r<0
-			off = c->jumpFail;
-		else if (krv[i] > 0)
+		if ((unsigned long)r > 18446744073709547520ULL) { //-4096<r<0
+			if (r <= -ERESTARTSYS && r >= -ERESTART_RESTARTBLOCK)
+				krv[i] = -EINTR; // ENOIOCTLCMD swept in but..
+			off = c->jumpFail;       //..never esc sys ret anyway.
+		} else if (r > 0)
 			off = c->jumpPos;
 		else
 			off = c->jump0;
+		if (off < 0) break;
 		if (signal_pending(current)) /* Should go @top & do unambig ..*/
 			break;               /*..0-progress repr w/C wrapper..*/
 	}                                    /*..translating signal-halted. */
-	if (i >= ncall)
-		i--;
+	if (i >= ncall) i = ncall - 1;
 errRet: if (unlikely(copy_to_user((void *)ur0, krv, (i + 1) * sizeof(long))))
 		segv((void *)ur0); // Cannot store EFAULT
 	kfree(buf);
@@ -188,6 +197,7 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 	}
 	sys_oldcall0 = scTab[__NR_batch];      /* save syscall */
 	memset(&deny[0], 0, sizeof deny);      /* maybe redundant */
+	BUILD_BUG_ON(__NR_syscall_max + 1 > sizeof deny);
 	deny[__NR_batch]=deny[__NR_clone]=deny[__NR_vfork]=deny[__NR_fork]=
 	deny[__NR_exit]=deny[__NR_exit_group]=deny[__NR_rt_sigreturn]=
 	deny[__NR_kexec_load]=1; deny[__NR_execve]=2;
@@ -200,14 +210,14 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 #ifdef __NR_kexec_file_load      /*..to support super-common $PATH search. */
 	deny[__NR_kexec_file_load] = 1;
 #endif /* __NR_kexec_file_load */
-	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
 	int err = register_kretprobe(&batch_kprobe);
 	if (err) {
-		pr_err("register_kprobe() failed: %d\n", err);
+		pr_err("register_kretprobe() failed: %d\n", err);
 		return err;
 	}
 #endif
+	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
 	printk(KERN_INFO "batch: installed as %d\n", __NR_batch);
 	return 0;
 }
@@ -215,7 +225,7 @@ static void __exit mod_cleanup(void) {  /* restore sys_call_table[__NR_batch] */
 	allow_writes(); scTab[__NR_batch] = sys_oldcall0; disallow_writes();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
 	unregister_kretprobe(&batch_kprobe);
-#endif
+#endif /* NOTE: it is unsafe to unload while any sys_batch is in progress. */
 	printk(KERN_INFO "batch: removed\n");
 }
 module_init(mod_init);
