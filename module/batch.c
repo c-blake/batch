@@ -188,9 +188,9 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 	deny[__NR_clone3] = 1;
 #endif /* __NR_clone3 */
 #ifdef __NR_execveat	/* Not much danger in uretprobe, reboot, ..*/
-	deny[__NR_execveat] = 1;
-#endif /* __NR_execveat */
-#ifdef __NR_kexec_file_load
+	deny[__NR_execveat] = 1; /* both this & execve COULD grow new non-0.. */
+#endif /* __NR_execveat */       /*..state(==2)for halt-on-0subcall w/no cpBk */
+#ifdef __NR_kexec_file_load      /*..to support super-common $PATH search. */
 	deny[__NR_kexec_file_load] = 1;
 #endif /* __NR_kexec_file_load */
 	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
