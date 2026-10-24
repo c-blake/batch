@@ -77,7 +77,7 @@ static inline long indirect_call(void *f, int argc, long *a)
 static struct kprobe kp = { .symbol_name = "kallsyms_lookup_name" };
 #endif
 static void **scTab = 0;
-static char deny[1024] = { 0 }; /*XXX Do pass not deny list? */
+static char deny[1024] = { 0 }; /*XXX Pass list rather than a deny list? */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 long sys_batch(const struct pt_regs *regs); /* prototype to silence warning */
@@ -93,11 +93,12 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long nc
         __attribute__((unused)) long flags, __attribute__((unused)) long size)
 {
 #endif
-	long          r = 0, off = 0, *krv = NULL;
+	long          off = 0, *krv = NULL;
 	unsigned long i = 0, urEnd = ur0 + ncall * sizeof(long),
 	              aEnd = uc0 + ncall * sizeof(syscall_t), kr0, kc0;
 	syscall_t    *calls = (syscall_t *)uc0, *buf = NULL;
 	gfp_t         gfp_flags = GFP_KERNEL | ___GFP_ZERO;
+	char          d;
 	if (ncall == 0)
 		return 0;
 	if (!(buf = kmalloc(ncall * (sizeof *krv + sizeof *calls), gfp_flags)))
@@ -123,12 +124,16 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0, unsigned long nc
 				{ krv[i] = -EFAULT; goto errRet; }
 			continue;
 		} //NOTE: any bogus != __NR_wdcpy can encode jump forward
-		r = krv[i] = unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
-		              deny[c->nr] || c->argc > 6 || !(f = scTab[c->nr]))
-		              ? -ENOSYS : indirect_call(f, c->argc, c->arg);
-		if ((unsigned long)r > 18446744073709547520ULL) // -4096 < r < 0
+		krv[i] = unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
+		                  c->argc > 6 || !(f = scTab[c->nr])) ? -ENOSYS
+		  : !(d = deny[c->nr]) ? indirect_call(f, c->argc, c->arg)
+		  : d == 1 ? -ENOSYS :
+		    ({ long x = indirect_call(f, c->argc, c->arg);
+		       if (!x) goto execOk;   /* old mm gone: no copy_to_user */
+		       x; });                 /* failed exec: normal -errno */
+		if ((unsigned long)krv[i] > 18446744073709547520ULL) //-4096<r<0
 			off = c->jumpFail;
-		else if (r > 0)
+		else if (krv[i] > 0)
 			off = c->jumpPos;
 		else
 			off = c->jump0;
@@ -141,6 +146,8 @@ errRet: if (unlikely(copy_to_user((void *)ur0, krv, (i + 1) * sizeof(long))))
 		segv((void *)ur0); // Cannot store EFAULT
 	kfree(buf);
 	return i;
+execOk: kfree(buf);
+	return 0;
 }
 
 static int ret_handle(struct kretprobe_instance *ri, struct pt_regs *reg) {
@@ -183,12 +190,12 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 	memset(&deny[0], 0, sizeof deny);      /* maybe redundant */
 	deny[__NR_batch]=deny[__NR_clone]=deny[__NR_vfork]=deny[__NR_fork]=
 	deny[__NR_exit]=deny[__NR_exit_group]=deny[__NR_rt_sigreturn]=
-	deny[__NR_execve]=deny[__NR_kexec_load]=1;
+	deny[__NR_kexec_load]=1; deny[__NR_execve]=2;
 #ifdef __NR_clone3
 	deny[__NR_clone3] = 1;
 #endif /* __NR_clone3 */
 #ifdef __NR_execveat	/* Not much danger in uretprobe, reboot, ..*/
-	deny[__NR_execveat] = 1; /* both this & execve COULD grow new non-0.. */
+	deny[__NR_execveat] = 2; /* both this & execve COULD grow new non-0.. */
 #endif /* __NR_execveat */       /*..state(==2)for halt-on-0subcall w/no cpBk */
 #ifdef __NR_kexec_file_load      /*..to support super-common $PATH search. */
 	deny[__NR_kexec_file_load] = 1;
