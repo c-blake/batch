@@ -54,7 +54,7 @@ It's not hard to imagine a C/other compiler detecting batchable situations
 automatically and even auto-converting from free form mode to various little
 batches.  On the source side this is not so different from auto-vectorization.
 The target language is also not so far from an assembly language with no
-backward jumps.
+backward jumps.  Cassyopia[^0] took steps in this direction.
 
 ## Limitations & Usage
 As set up right now, it only works on Linux x86\_64 for kernels in the late 4.*
@@ -132,6 +132,10 @@ It may not be advisable to deploy this on a system with untrusted user code.
 E.g., the `deny` list hasn't been vetted for security implications or
 interactions with syscall auditing.  It seemed worth sharing/getting feedback
 upon.
+
+[^0]: Rajagopalan, M., Debray, S. K., Hiltunen, M. A., & Schlichting, R. D.
+(2003). Cassyopia: Compiler assisted system optimization. In 9th Workshop on Hot
+Topics in Operating Systems (HotOS IX). USENIX Association.
 
 [^1]: At a low, but annoying cost of one fd per process, this idea could be done
 with a device driver or a VFS (e.g. write(2)ing batch structs to run), but that
