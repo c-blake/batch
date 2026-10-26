@@ -12,7 +12,7 @@ package does.
 ## Basic API
 Only minimal in-kernel control flow is given.  This makes work trivially
 loop-free (guaranteed to halt), bounded by batch size.  It also affords a fast
-enough virtual machine (only 27 lines of C!) to be worthwhile.  Specifically,
+enough virtual machine (only 36 lines of C!) to be worthwhile.  Specifically,
 a batch can only jump forward by 1 or more array slots in the array of system
 calls trivalently on returns `{ < 0, == 0, > 0 }`.  Said returns conventionally
 mean usually { error, success/done/EOF, and more-work-or answer } conditions.
