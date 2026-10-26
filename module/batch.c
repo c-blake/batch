@@ -159,16 +159,51 @@ execOk: kfree(buf);
 	return 0;
 }
 
-static int ret_handle(struct kretprobe_instance *ri, struct pt_regs *reg) {
-	if (reg->si == __NR_batch)  // Might parent regs not always be in `di`?
-		regs_set_return_value(reg, sys_batch((struct pt_regs*)reg->di));
-	return 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
+#include <linux/ftrace.h>
+static unsigned long hook_addr;
+
+static long batch_ni_syscall(const struct pt_regs *regs)
+{ /* TODO try_module_get(THIS_MODULE)/module_put pair for rmmod fail w/EBUSY */
+	if (regs->orig_ax == __NR_batch)      /* syscall_get_nr() on x86 */
+		return sys_batch(regs);
+	return -ENOSYS;                       /* All that ni_syscall does */
+} /* Runs in place of __x64_sys_ni_syscall(regs): same args & return addr. */
+
+static void notrace hook_cb(unsigned long ip, unsigned long parent_ip,
+                            struct ftrace_ops *ops, struct ftrace_regs *fregs)
+{
+	struct pt_regs *regs = ftrace_get_regs(fregs); /* !0 given SAVE_REGS */
+	if (regs)
+		regs->ip = (unsigned long)batch_ni_syscall;
 }
 
-struct kretprobe batch_kprobe = {
-	.kp.symbol_name = "__x64_sys_ni_syscall",
-	.handler = ret_handle, .maxactive = 32,
+static struct ftrace_ops hook_ops = {
+	.func  = hook_cb,
+	.flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION |
+	         FTRACE_OPS_FL_IPMODIFY,
 };
+
+static int hook_install(unsigned long addr)
+{
+	int e = ftrace_set_filter_ip(&hook_ops, addr, 0, 0);
+	if (e) {
+		pr_err("batch: ftrace_set_filter_ip: %d; See CONFIG Notes\n",e);
+		return e;
+	}
+	if ((e = register_ftrace_function(&hook_ops))) {
+		ftrace_set_filter_ip(&hook_ops, addr, 1, 0);
+		pr_err("batch: register_ftrace_function: %d\n", e);
+	}
+	return e;
+}
+
+static void hook_remove(unsigned long addr)
+{
+	unregister_ftrace_function(&hook_ops);
+	ftrace_set_filter_ip(&hook_ops, addr, 1, 0);
+}
+#endif
 
 extern unsigned long __force_order __weak;
 #define store_cr0(x) asm volatile("mov %0,%%cr0" : "+r"(x), "+m"(__force_order))
@@ -211,21 +246,24 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 	deny[__NR_kexec_file_load] = 1;
 #endif /* __NR_kexec_file_load */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
-	int err = register_kretprobe(&batch_kprobe);
-	if (err) {
-		pr_err("register_kretprobe() failed: %d\n", err);
-		return err;
+	int err;
+	if (!(hook_addr = kallsyms_lookup_name("__x64_sys_ni_syscall"))) {
+		pr_err("batch: cannot find __x64_sys_ni_syscall\n");
+		return -ENOENT;
 	}
+	if ((err = hook_install(hook_addr)))
+		return err;
 #endif
 	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
 	printk(KERN_INFO "batch: installed as %d\n", __NR_batch);
 	return 0;
 }
 static void __exit mod_cleanup(void) {  /* restore sys_call_table[__NR_batch] */
-	allow_writes(); scTab[__NR_batch] = sys_oldcall0; disallow_writes();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
-	unregister_kretprobe(&batch_kprobe);
-#endif /* NOTE: it is unsafe to unload while any sys_batch is in progress. */
+	hook_remove(hook_addr);
+#endif
+	allow_writes(); scTab[__NR_batch] = sys_oldcall0; disallow_writes();
+	/* Presently unsafe to unload while any sys_batch is in progress. */
 	printk(KERN_INFO "batch: removed\n");
 }
 module_init(mod_init);
