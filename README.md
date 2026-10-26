@@ -66,48 +66,48 @@ hijacking the `afs_syscall` slot.  Usage should be as easy as[^1]:
 git clone https://github.com/c-blake/batch $HOME/s/bat
 cd $HOME/s/bat/module; ./build
 as-root insmod batch.ko     # or modprobe batch
-cd ../examples; make unimpl
-BATCH_VERBOSE=1 ./unimpl    # should print "sys_batch Real\n" to stderr
-BATCH_EMUL=1 ./unimpl
+cd ../examples; make getuids
+BATCH_VERBOSE=1 ./getuids   # should print "sys_batch Real\n" to stderr
+BATCH_EMUL=1 ./getuids
 ```
 ## Checking if it works
-You can also run `strace ./unimpl` to see if `afs_syscall` is being used.  You
+You can also run `strace ./getuids` to see if `afs_syscall` is being used.  You
 may need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or reboot with
 `nokaslr=1` on the kernel command line to get a 3rd party module inserted.  You
-also (since Linux-5.7) need CONFIG_FUNCTION_TRACER=y CONFIG_DYNAMIC_FTRACE=y
-CONFIG_DYNAMIC_FTRACE_WITH_REGS=y & sysctl kernel.ftrace_enabled=1.[^1]
+also (since Linux-5.7) need `CONFIG_FUNCTION_TRACER=y CONFIG_DYNAMIC_FTRACE=y
+CONFIG_DYNAMIC_FTRACE_WITH_REGS=y` & `sysctl kernel.ftrace_enabled=1`.[^1]
 
 ## A Simple Benchmark, More Carefully Evaluated
 We can get a sense of the best possible overhead reduction on your CPU by using
 the Nim program [`fitl`](https://github.com/c-blake/fitl) and this repos
-[`examples/unimpl.c`](examples/unimpl.c):
+[`examples/getuids.c`](examples/getuids.c):
 ```
-X$ BATCH_EMUL=1 ./unimpl|awk '{print $3,$2,$1*$2}'|fitl -s0 -c,=,n,b -b100 1 2 3
-$1= -22.56 *$2 + 186.048 *$3
+$ BATCH_EMUL=1 ./getuids|awk '{print $3,$2,$1*$2}'|fitl -s0 -c,=,n,b -b100 1 2 3
+$1= -23.41 *$2 + 147.132 *$3
 
 bootstrap-stderr-corr matrix
-     13.57    -0.8123
-               0.3989
+     6.577    -0.5422
+               0.6431
 
-X$ ./unimpl|awk '{print $3,$2,$1*$2}'|fitl -s0 -c,=,n,b -b100 1 2 3 
-$1= 235.59 *$2 + 21.564 *$3
+$ ./getuids|awk '{print $3,$2,$1*$2}'|fitl -s0 -c,=,n,b -b100 1 2 3 
+$1= 349.83 *$2 + 12.950 *$3
 
 bootstrap-stderr-corr matrix
-     2.834    -0.6642
-               0.1804
+     1.126    -0.8054
+               0.1614
 ```
-The way to read this is: Doing a user-space loop, the time equation is (-22.6 +-
-13.6) + (186.05 +- 0.40)\*numSysCalls nanoseconds while via `sys_batch` it takes
-(235.59 +- 2.83) + (21.56 +- 0.18)\*numSysCalls.  The per-call overhead ratio is
-thus (186.05 +- 0.40)/(21.56 +- 0.18).  Using [error
+The way to read this is: Doing a user-space loop, the time equation is (-23.4 +-
+6.6) + (147.13 +- 0.64)\*numSysCalls nanoseconds while via `sys_batch` it takes
+(349.8 +- 1.1) + (12.95 +- 0.16)\*numSysCalls.  The per-call overhead ratio is
+thus (147.13 +- 0.64)/(12.95 +- 0.16).  Using [error
 propagation](https://en.wikipedia.org/wiki/Propagation_of_uncertainty) this
-ratio becomes (8.628 +- 0.075).
+ratio becomes (11.36 +- 0.15).
 
-Since the errors are >100x smaller than values this is statistically significant
+Since errors are ~100x smaller than values, this is statistically significant
 and the propagation is approximately correct for Gaussian errors (which these
 are *not*, though, but the leptokurtosis here is not enough to invalidate the
 main result and people care more about the leading ratio than its distribution).
-Since the ratio is 8.6X faster, it is also a substantial improvement.[^2]
+Since the ratio is >11X faster, it is also a substantial improvement.[^2]
 
 Of course, just returning `ENOSYS` is the least work kernels can do.  Almost all
 other calls do much more work on the kernel-side which amortizes entry overhead
@@ -139,8 +139,8 @@ So, this should evolve into a patch set against mainline Linux.  Then it will
 need building your own whole kernel just to try out.  Since almost all interest
 so far in this has been "fly by" interest, time pressure for that is not great.
 
-[^2]: These times are for an Intel i7-1370P running Linux-6.17.7 with no window
+[^2]: These times are for an Intel i7-1370P running Linux-7.2.8 with no window
 system and only `sshd` running as competing work.  While this is a big-little
 arch, the minimum loop in the benchmark should filter to only times for P-cores.
-One can of course use `taskset` & `chrt` to try to coax the Linux scheduler to
-do better, but we did get numbers with seemingly small errors.
+One can of course use `taskset` & `chrt` to try to coax Linux schedulers to do
+better, but we did get numbers with seemingly small errors.
