@@ -118,10 +118,10 @@ where the kernel-side work is minimal but necessary.  Another end-to-end example
 is https://github.com/c-blake/bu/blob/main/mk1.nim freshness checking 40,400 hot
 cache files relative to the same number of outputs ~2.2x faster w/`sys_batch`.
 
-An entirely different approach to analyze performance here might be to port the
-27 lines of C virtual machine to user space or profile it in-kernel to study
+An entirely different approach to analyze performance here might be to measure
+the batch.h virtual machine in user space or profile it in-kernel to study
 behavior.  I did do that back around year 2000, but did not for this round.  In
-any event, that kind of analysis, the above ENOSYS microbenchmark, and
+any event, that kind of analysis, the above getuid microbenchmark, and
 end-to-end application performance will all be very sensitive to both CPU and
 kernel spectre mitigations.  I would certainly be interested in anyone doing
 such work and happy to post it in this repository upon request.
