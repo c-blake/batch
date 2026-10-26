@@ -74,7 +74,8 @@ BATCH_EMUL=1 ./unimpl
 You can also run `strace ./unimpl` to see if `afs_syscall` is being used.  You
 may need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or reboot with
 `nokaslr=1` on the kernel command line to get a 3rd party module inserted.  You
-also (since Linux-5.7) need the `kprobes` facility activated.[^1]
+also (since Linux-5.7) need CONFIG_FUNCTION_TRACER=y CONFIG_DYNAMIC_FTRACE=y
+CONFIG_DYNAMIC_FTRACE_WITH_REGS=y & sysctl kernel.ftrace_enabled=1.[^1]
 
 ## A Simple Benchmark, More Carefully Evaluated
 We can get a sense of the best possible overhead reduction on your CPU by using
@@ -128,20 +129,12 @@ This is presently at a proof-of-concept level to study optimization opportunity.
 It may not be advisable to deploy this on a system with untrusted user code.
 E.g., the `deny` list hasn't been vetted for security implications or
 interactions with syscall auditing.  It seemed worth sharing/getting feedback
-upon.  Beyond this, the kprobes variant (needed as of Linux-6.9 when Linux
-ceased being extensible) ***ONLY WORKS WITH KID SYSCALLS THAT DO NOT BLOCK
-ANYWHERE EVER*** like an unimplemented call.  Otherwise you get "BUG: scheduling
-while atomic:" kernel messages & oopses and can crash your system.  This is a
-very dynamic situation, though.  The above `unimpl` example changed to `mdu`
-works fine ***IF*** you first ensure all the dentries are cached.  Since this
-module is mostly about timing/API testing, and since in those cases the "hot"
-path is the one with primary interest in syscall overhead reduction, the module
-retains some utility.
+upon.
 
 [^1]: At a low, but annoying cost of one fd per process, this idea could be done
 with a device driver or a VFS (e.g. write(2)ing batch structs to run), but that
-may have different performance characteristics.  It is most naturally viewed as
-a "meta-system-call".  An implementation reflecting this makes the most sense.
+may have different performance characteristics.  This idea is most naturally a
+"meta-system-call".  An implementation reflecting this makes the most sense.
 So, this should evolve into a patch set against mainline Linux.  Then it will
 need building your own whole kernel just to try out.  Since almost all interest
 so far in this has been "fly by" interest, time pressure for that is not great.
