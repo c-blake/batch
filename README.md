@@ -58,7 +58,7 @@ backward jumps.
 
 ## Limitations & Usage
 As set up right now, it only works on Linux x86\_64 for kernels in the late 4.*
-to present 6.* version ranges.  It might work on earlier 3.x versions, but I
+to present 7.* version ranges.  It might work on earlier 3.x versions, but I
 haven't tested it on such.  For my development convenience and ease of others
 trying it without doing a full kernel build, I hacked it up as a module
 hijacking the `afs_syscall` slot.  Usage should be as easy as[^1]:
@@ -109,12 +109,14 @@ are *not*, though, but the leptokurtosis here is not enough to invalidate the
 main result and people care more about the leading ratio than its distribution).
 Since the ratio is >11X faster, it is also a substantial improvement.[^2]
 
-Of course, just returning `ENOSYS` is the least work kernels can do.  Almost all
+Of course, just returning uids is about the least work kernels do.  Almost all
 other calls do much more work on the kernel-side which amortizes entry overhead
 to be a small cost in context.  For example, the speed-up is much lower for the
 work of `mdu.c` mentioned above.  Low hanging fruit optimizations here are
-things like shells doing many sigaction calls as user-space loops over signals
-where the kernel-side work is minimal but necessary.
+things like shells doing many `sigaction` calls as user-space loops over signals
+where the kernel-side work is minimal but necessary.  Another end-to-end example
+is https://github.com/c-blake/bu/blob/main/mk1.nim freshness checking 40,400 hot
+cache files relative to the same number of outputs ~2.2x faster w/`sys_batch`.
 
 An entirely different approach to analyze performance here might be to port the
 27 lines of C virtual machine to user space or profile it in-kernel to study
