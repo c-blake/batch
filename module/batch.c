@@ -45,6 +45,7 @@ typedef asmlinkage long (*F6_t)(long, long, long, long, long, long);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+typedef long (*sc_t)(const struct pt_regs *);   /* sys_call_ptr_t */
 static inline long indirect_call(void *f, int argc, long *a)
 {	/* x64 syscall calling convention changed @4.17 to use struct pt_regs */
 	struct pt_regs regs;
@@ -56,8 +57,8 @@ static inline long indirect_call(void *f, int argc, long *a)
 		case 3: regs.dx  = a[2]; /* Falls through. */
 		case 2: regs.si  = a[1]; /* Falls through. */
 		case 1: regs.di  = a[0]; /* Falls through. */
-	}
-	return ((F1_t)f)((long)&regs);
+	} /* sc_t supports kernels built w/CONFIG_CFI_CLANG(kCFI) & trap on. */
+	return ((sc_t)f)(&regs);
 }
 #else
 static inline long indirect_call(void *f, int argc, long *a)
