@@ -111,5 +111,6 @@ void ftw(const char *path, ftw_f visit, int xdev) {
 			ftwR(&s, dfd, m);
 	}
 	visit(path, path, &root);
+        close(dfd);
 }
 #endif //FTW_C
