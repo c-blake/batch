@@ -3,13 +3,14 @@ Kernel <-> user crossings are expensive.  Across any such boundary (IPC / net
 messages are other obvious cases), it makes sense to do as much work per
 crossing as possible.  Batching is one approach.  In the Linux user-kernel
 setting, privilege checking and such is already done inside system call code.
-So, security implications should be minimal and there should be no need to
-restrict code uploaders to be privileged or verify code like eBPF.  Rather than
-a general in-kernel execution environment, one can get much mileage out of a
-deliberately bounded data/control-flow model.  All we need is a convenient API
-to interpret a bounded array of system-call instructions.  That's what this
-package does.  Instead of adding yet another subsystem specific batch API like
-`readv`, the problem can maybe be solved once & for all.[^1]
+So, security implications should be confined to entry path aspects (seccomp,
+audit, strace, ..) and there should be no need to restrict code uploaders to be
+privileged or verify code like eBPF.  Rather than a general in-kernel execution
+environment, one can get much mileage out of a deliberately bounded
+data/control-flow model.  All we need is a convenient API to interpret a bounded
+array of system-call instructions.  That's what this package does.  Instead of
+adding yet another subsystem specific batch API like `readv`, the problem can
+maybe be solved once & for all.[^1]
 
 ## Basic API
 Only minimal in-kernel control flow is given.  This makes work trivially
