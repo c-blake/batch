@@ -1,13 +1,14 @@
 # batch: Generic Linux System Call Batching
-Kernel <-> user crossings are expensive.  Across any such boundary (IPC or
-network messages are other obvious cases), it makes sense to do as much work per
+Kernel <-> user crossings are expensive.  Across any such boundary (IPC / net
+messages are other obvious cases), it makes sense to do as much work per
 crossing as possible.  Batching is one approach.  In the Linux user-kernel
 setting, privilege checking and such is already done inside system call code.
 So, security implications should be minimal and there should be no need to
-restrict code uploaders to be privileged or verify code like EBPF.  All we need
+restrict code uploaders to be privileged or verify code like eBPF.  All we need
 to do to add this to Linux is decide on a convenient API to loop over an array
 of system calls storing into an array of return values.  That's what this
-package does.
+package does.  Instead of adding yet another subsystem specific batch API like
+`readv`, the problem can be solved once & for all.
 
 ## Basic API
 Only minimal in-kernel control flow is given.  This makes work trivially
@@ -22,10 +23,10 @@ the usual, e.g.  `fork`,  or `batch` itself (to prevent loops "spelled"
 as recursion).  Denied system calls get `-ENOSYS` in the return value slot.
 
 One "fake" syscall is implemented in-line in the sub-call dispatch loop: word
-copy.  This allows chaining outputs of one call to inputs of subsequent calls.
-Any unimplemented/always failing call can skip blocks meant as an
-error/alternate paths.  This allows representing a great many
-multi-call-programs.
+copy.  This allows chaining outputs of one call to inputs of subsequent calls
+(such as using a file descriptor return in a subsequent call).  Any
+unimplemented/always failing call can skip blocks meant as an error/alternate
+paths.  This allows representing a great many multi-call-mini-programs.
 
 ## Driving the Impl
 This kind of interface is easy to "emulate" in pure user-space code when a
@@ -42,19 +43,22 @@ stat's are not.  `du` is a classic example here.  In personal timings, I see
 speed-ups vs GNU `du` since the latter probably uses an `ftw` more expensive
 than [`ftw.c`](examples/ftw.c) to do tree depths unbounded by open fd limits).
 
-Another natural example is "path search" wherein a user program attempts
+Another natural example is "path search" wherein user programs attempt
 several-to-many easily pre-computed paths, stopping at the first one which
 succeeds/has a syscall return 0.  This would be a `syscall_t` array with many
 `scall3(open, 0, -1, -1, pathX, flags, 0)` entries.  In reality, examples are
 limited only by one's imagination, but be forewarned that much system work
 interacting with real devices is dominated by much larger times & overheads.
 
-## Extensions
+## Extensions / Future Directions
 It's not hard to imagine a C/other compiler detecting batchable situations
 automatically and even auto-converting from free form mode to various little
 batches.  On the source side this is not so different from auto-vectorization.
 The target language is also not so far from an assembly language with no
-backward jumps.  Cassyopia[^0] took steps in this direction.
+backward jumps.  Cassyopia[^0] took steps in this direction, but with a less
+expressive notion of batching limiting mini-programs to "flat batches".  The
+idea of having the presently unused `flags` parameter take a `BATCH_ATOMIC` to
+auto-acquire & release an in-kernel lock is another easily imagined direction.
 
 ## Limitations & Usage
 As set up right now, it only works on Linux x86\_64 for kernels in the late 4.*
@@ -119,12 +123,12 @@ is https://github.com/c-blake/bu/blob/main/mk1.nim freshness checking 40,400 hot
 cache files relative to the same number of outputs ~2.2x faster w/`sys_batch`.
 
 An entirely different approach to analyze performance here might be to measure
-the batch.h virtual machine in user space or profile it in-kernel to study
-behavior.  I did do that back around year 2000, but did not for this round.  In
-any event, that kind of analysis, the above getuid microbenchmark, and
-end-to-end application performance will all be very sensitive to both CPU and
-kernel spectre mitigations.  I would certainly be interested in anyone doing
-such work and happy to post it in this repository upon request.
+the `batch.h` VM in user space or profile it in-kernel to study behavior.  I did
+that back around year 2000, but did not for this round.  In any event, that kind
+of analysis, the above `getuid` microbenchmark, and end-to-end application perf
+will all be very sensitive to both CPU & kernel spectre mitigations.  I'd be
+interested in anyone doing such work & happy to post it in this repository upon
+request.
 
 ## Final Caveats
 This is presently at a proof-of-concept level to study optimization opportunity.
