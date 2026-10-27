@@ -4,11 +4,12 @@ messages are other obvious cases), it makes sense to do as much work per
 crossing as possible.  Batching is one approach.  In the Linux user-kernel
 setting, privilege checking and such is already done inside system call code.
 So, security implications should be minimal and there should be no need to
-restrict code uploaders to be privileged or verify code like eBPF.  All we need
-to do to add this to Linux is decide on a convenient API to loop over an array
-of system calls storing into an array of return values.  That's what this
+restrict code uploaders to be privileged or verify code like eBPF.  Rather than
+a general in-kernel execution environment, one can get much mileage out of a
+deliberately bounded data/control-flow model.  All we need is a convenient API
+to interpret a bounded array of system-call instructions.  That's what this
 package does.  Instead of adding yet another subsystem specific batch API like
-`readv`, the problem can be solved once & for all.
+`readv`, the problem can maybe be solved once & for all.[^1]
 
 ## Basic API
 Only minimal in-kernel control flow is given.  This makes work trivially
@@ -55,7 +56,7 @@ It's not hard to imagine a C/other compiler detecting batchable situations
 automatically and even auto-converting from free form mode to various little
 batches.  On the source side this is not so different from auto-vectorization.
 The target language is also not so far from an assembly language with no
-backward jumps.  Cassyopia[^0] took steps in this direction, but with a less
+backward jumps.  Cassyopia[^1] took steps in this direction, but with a less
 expressive notion of batching limiting mini-programs to "flat batches".  The
 idea of having the presently unused `flags` parameter take a `BATCH_ATOMIC` to
 auto-acquire & release an in-kernel lock is another easily imagined direction.
@@ -65,7 +66,7 @@ As set up right now, it only works on Linux x86\_64 for kernels in the late 4.*
 to present 7.* version ranges.  It might work on earlier 3.x versions, but I
 haven't tested it on such.  For my development convenience and ease of others
 trying it without doing a full kernel build, I hacked it up as a module
-hijacking the `afs_syscall` slot.  Usage should be as easy as[^1]:
+hijacking the `afs_syscall` slot.  Usage should be as easy as[^3]:
 ```
 git clone https://github.com/c-blake/batch $HOME/s/bat
 cd $HOME/s/bat/module; ./build
@@ -79,7 +80,7 @@ You can also run `strace ./getuids` to see if `afs_syscall` is being used.  You
 may need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or reboot with
 `nokaslr=1` on the kernel command line to get a 3rd party module inserted.  You
 also (since Linux-5.7) need `CONFIG_FUNCTION_TRACER=y CONFIG_DYNAMIC_FTRACE=y
-CONFIG_DYNAMIC_FTRACE_WITH_REGS=y` & `sysctl kernel.ftrace_enabled=1`.[^1]
+CONFIG_DYNAMIC_FTRACE_WITH_REGS=y` & `sysctl kernel.ftrace_enabled=1`.[^3]
 
 ## A Simple Benchmark, More Carefully Evaluated
 We can get a sense of the best possible overhead reduction on your CPU by using
@@ -111,7 +112,7 @@ Since errors are ~100x smaller than values, this is statistically significant
 and the propagation is approximately correct for Gaussian errors (which these
 are *not*, though, but the leptokurtosis here is not enough to invalidate the
 main result and people care more about the leading ratio than its distribution).
-Since the ratio is >11X faster, it is also a substantial improvement.[^2]
+Since the ratio is >11X faster, it is also a substantial improvement.[^4]
 
 Of course, just returning uids is about the least work kernels do.  Almost all
 other calls do much more work on the kernel-side which amortizes entry overhead
@@ -137,19 +138,48 @@ E.g., the `deny` list hasn't been vetted for security implications or
 interactions with syscall auditing.  It seemed worth sharing/getting feedback
 upon.
 
-[^0]: Rajagopalan, M., Debray, S. K., Hiltunen, M. A., & Schlichting, R. D.
+[^1]: A full related work / comparison section seems maybe too distracting, but
+this work is a unique/distinct approach from quite a few problem adjacent ones
+to merit some notes.  CompositeCalls (Ballesteros et al., 2000) is by far the
+closest work, but it allows less safe unbounded programs and is also slow (7X
+per-call overhead relative to the 2X here).  Trading generality for safety and
+getting perf seems win-win here.  Cosy (Purohit et al., 2003) is also very close
+and does chain return values, but allows loops and in-kernel user functions,
+needing time limits and segmentation for safety.  Cassyopia[^2] did more
+automatic discovery (like Cosy) but used a less expressive VM limiting
+opportunities.  eBPF allows more general programs but doesn't re-use syscalls
+through the table.  Reaching `statx`, `mmap`, etc. means more code for kernel
+side helpers than the whole batch facility.  Unprivileged eBPF is also off by
+default on many systems.  io_uring (also oft off lately) has a similar "few
+blessed subcalls" aspect & e.g. w/statx uses 2.5x more total CPU.  Xen's
+multi-call for hypercalls does not do chained / conditional and does not reach
+death-by-1000-syscall-cuts complaints against the Unix API.  NFSv4 COMPOUND &
+SMB2 ("current filehandle" ideas) are similarly confined to preliminary steps of
+protocol-level ident propagation, not conditional branching or ret-val-to-arg
+propagation.  The MIT exokernel xok had a "flat batch" idea with a beautiful
+comment by Mazieres about batching and had a few other "mini assembly
+languages", but not this one.  This extension to easily bounded conditional
+chains was inspired by that work, not Ballesteros et al.  (which this work
+notionally pre-dates).  Ballesteros&Cassyopia&Cosy (at least!) are strong prior
+art for the general claims of US9038075, maybe worth mention if one doubts the
+Red Hat Patent Promise.  A not wholly unfair summary might be low-level API
+focus of the exokernel & CompositeCalls had a baby that realizes broader safety
+by limited control flow and broader applicability via chaining with less
+generality than eBPF/Cosy, but also without associated costs.
+
+[^2]: Rajagopalan, M., Debray, S. K., Hiltunen, M. A., & Schlichting, R. D.
 (2003). Cassyopia: Compiler assisted system optimization. In 9th Workshop on Hot
 Topics in Operating Systems (HotOS IX). USENIX Association.
 
-[^1]: At a low, but annoying cost of one fd per process, this idea could be done
+[^3]: At a low, but annoying cost of one fd per process, this idea could be done
 with a device driver or a VFS (e.g. write(2)ing batch structs to run), but that
-may have different performance characteristics.  This idea is most naturally a
-"meta-system-call".  An implementation reflecting this makes the most sense.
+may have different performance characteristics.  Long-term, this idea fits most
+naturally a "meta-system-call".  So, an impl showing this makes the most sense.
 So, this should evolve into a patch set against mainline Linux.  Then it will
 need building your own whole kernel just to try out.  Since almost all interest
 so far in this has been "fly by" interest, time pressure for that is not great.
 
-[^2]: These times are for an Intel i7-1370P running Linux-7.2.8 with no window
+[^4]: These times are for an Intel i7-1370P running Linux-7.2.8 with no window
 system and only `sshd` running as competing work.  While this is a big-little
 arch, the minimum loop in the benchmark should filter to only times for P-cores.
 One can of course use `taskset` & `chrt` to try to coax Linux schedulers to do
