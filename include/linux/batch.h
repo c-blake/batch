@@ -47,29 +47,35 @@ static inline long indirect_call(int nr, int argc, long *a) {
 		case 5: return syscall(nr, a[0], a[1], a[2], a[3], a[4]);
 		case 6: return syscall(nr, a[0], a[1], a[2], a[3], a[4], a[5]);
 	}
-	return ENOSYS;
+	return -ENOSYS;
 }
 
 static inline long batchE(long rets[], struct syscall calls[],
-                          unsigned long ncall, long size, long flags)
+                          unsigned long ncall, long flags, long size)
 {
 	syscall_t *c;
 	unsigned   i;
 	long       r = 0, off = 0;
+	if (flags | size) return -EINVAL;
 	if (ncall == 0)
 		return 0;
-	for (i = 0; i < ncall && off >= 0; i += 1 + off) {
+	if (ncall > 4096) return -EINVAL;
+	for (i = 0; i < ncall; /**/) {
 		c = &calls[i];
 		if (c->nr == __NR_wdcpy) {
 			*(long *)(c->arg[0]) = *(long *)(c->arg[1]);
+			rets[i++] = 0;
 			off = 0;
 			continue;
 		} //NOTE: any bogus != __NR_wdcpy can encode jump forward
-		r = (c->nr < 0 || c->nr > 1024 || deny[c->nr] || c->argc > 6) ?
-		    -ENOSYS : indirect_call(c->nr, c->argc, c->arg);
+		r = (c->nr < 0 || (unsigned) c->nr >= sizeof deny ||
+		     (unsigned)c->argc > 6 || deny[c->nr]) ? -ENOSYS :
+		    indirect_call(c->nr, c->argc, c->arg);
+		if (r == -1)
+			r = -errno;
 		if ((unsigned long)r > 18446744073709547520ULL) { // -4096 < r < 0
 			off = c->jumpFail;
-			rets[i] = -errno;
+			rets[i] = r;
 		} else if (r > 0) {
 			off = c->jumpPos;
 			rets[i] = r;
@@ -77,8 +83,11 @@ static inline long batchE(long rets[], struct syscall calls[],
 			off = c->jump0;
 			rets[i] = 0;
 		}
+		if (off < 0)
+			break;
+		i += 1 + off;
 	}
-	return i < ncall ? i : i - 1;
+	return i < ncall ? i : ncall - 1;
 }
 
 static int batch_emul_init(void) {      // Auto-detect unless $BATCH_EMUL..
