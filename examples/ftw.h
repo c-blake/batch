@@ -11,7 +11,7 @@ extern "C" {
 */
 typedef void (*ftw_f)(const char *path, const char *base, statx_t *stx);
 
-void ftw(const char *path, ftw_f visit, int maxDepth, int xdev);
+void ftw(const char *path, ftw_f visit, int xdev);
 
 #ifdef __cplusplus
 }

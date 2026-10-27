@@ -17,7 +17,7 @@ int main(int ac, char** av) {
 	if (ac > 2)
 		n = atoi(av[2]);
 	for (i = 0; i < n; i++)
-		ftw(ac > 1 ? av[1] : ".", visit, 1024, 1);
+		ftw(ac > 1 ? av[1] : ".", visit, 1);
 	fprintf(stderr, "%d links visited\n", visited_links);
 	return 0;
 }

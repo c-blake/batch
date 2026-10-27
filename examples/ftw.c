@@ -16,10 +16,10 @@
 struct ftw_s {            // Cross-recursion state encapsulation.  This does NOT
 	char  path[4096], // make the routine MT-safe as chdir() is still used.
 	     *pfx;        // Concurrent ftws need expensive full path stats.
-	ftw_f visit;      // Encapsulation here i sjust for hygiene.
+	ftw_f visit;      // Encapsulation here is just for hygiene.
 	long  flags, mask;  // statx controls
-	__u32 major, minor, maxDepth; // device containing root, max recursion depth
-        char  xdev;
+	__u32 major, minor; // device containing root
+        char  xdev;       // cross device flag
 };
 
 static inline int dotOrDotDot(char *dir) {
@@ -88,7 +88,7 @@ static void ftwR(struct ftw_s *s, int dfd, int nPath) {
 	}
 }
 
-void ftw(const char *path, ftw_f visit, int maxDepth, int xdev) {
+void ftw(const char *path, ftw_f visit, int xdev) {
 	struct ftw_s s = { "", NULL, visit,
 	                   AT_SYMLINK_NOFOLLOW|AT_NO_AUTOMOUNT, STATX_TYPE };
 	statx_t root;
@@ -104,7 +104,6 @@ void ftw(const char *path, ftw_f visit, int maxDepth, int xdev) {
 		s.pfx = s.path;
 		s.major = root.stx_dev_major;
 		s.minor = root.stx_dev_minor;
-		s.maxDepth = maxDepth;
 		s.xdev = !!xdev;
 		if ((dfd = open(s.path, O_RDONLY|O_DIRECTORY)) < 0)
 			perror("statx");
