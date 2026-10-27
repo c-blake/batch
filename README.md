@@ -21,7 +21,7 @@ calls trivalently on returns `{ < 0, == 0, > 0 }`.  Said returns conventionally
 mean usually { error, success/done/EOF, and more-work-or answer } conditions.
 
 Not all system call targets are allowed since call-return protocols vary from
-the usual, e.g.  `fork`,  or `batch` itself (to prevent loops "spelled"
+the usual, e.g. `fork`, `exit`, or `batch` itself (to prevent loops "spelled"
 as recursion).  Denied system calls get `-ENOSYS` in the return value slot.
 
 One "fake" syscall is implemented in-line in the sub-call dispatch loop: word
