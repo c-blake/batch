@@ -14,7 +14,7 @@
 #include <linux/batch.h> /**/
 
 struct ftw_s {            // Cross-recursion state encapsulation.  This does NOT
-	char  path[4096], // make the routine MT-safe as chdir() is still used.
+	char  path[8192], // make the routine MT-safe as chdir() is still used.
 	     *pfx;        // Concurrent ftws need expensive full path stats.
 	ftw_f visit;      // Encapsulation here is just for hygiene.
 	long  flags, mask;  // statx controls
@@ -73,6 +73,8 @@ static void ftwR(struct ftw_s *s, int dfd, int nPath) {
 		for (i = 0; i < nB; i++) {
 			char *name = (char *)(bat[i].arg[1]);
 			int m = strlen(name);
+			if (nPath + m + 1 > (int)sizeof(s->path))
+				continue; /* handle path too long */
 			memcpy(ent, name, m + 1);
 			s->visit(s->path, s->path + nPath, sts + i);
 			if (dts[i] == DT_DIR && (!s->xdev ||
@@ -92,7 +94,7 @@ void ftw(const char *path, ftw_f visit, int xdev) {
 	struct ftw_s s = { "", NULL, visit,
 	                   AT_SYMLINK_NOFOLLOW|AT_NO_AUTOMOUNT, STATX_TYPE };
 	statx_t root;
-	int     dfd;
+	int     dfd = -1;
 	root.stx_dev_major = root.stx_nlink = 0;
 	if (statx(AT_FDCWD, path, s.flags, s.mask, &root) < 0) {
 		perror("statx");
@@ -100,6 +102,8 @@ void ftw(const char *path, ftw_f visit, int xdev) {
 	}
 	if (S_ISDIR(root.stx_mode)) {
 		int m = strlen(path);
+                if (m + 1 >= (int)sizeof(s.path))
+			return;
 		memcpy(s.path, path, m + 1);
 		s.pfx = s.path;
 		s.major = root.stx_dev_major;
@@ -111,6 +115,6 @@ void ftw(const char *path, ftw_f visit, int xdev) {
 			ftwR(&s, dfd, m);
 	}
 	visit(path, path, &root);
-        close(dfd);
+	if (dfd >= 0) close(dfd);
 }
 #endif //FTW_C
