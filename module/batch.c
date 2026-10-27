@@ -82,6 +82,7 @@ static struct kprobe kp = { .symbol_name = "kallsyms_lookup_name" };
 #endif
 static void **scTab = 0;
 static char deny[1024] = { 0 }; /*XXX Pass list rather than a deny list? */
+static void (*run_task_work)(void); /* Not EXPORTed to modules: use kallsyms */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 long sys_batch(const struct pt_regs *regs); /* prototype to silence warning */
@@ -148,6 +149,8 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0,
 		else
 			off = c->jump0;
 		if (off < 0) break;
+		if (unlikely(READ_ONCE(current->task_works))) // dup2 fput defer
+			run_task_work();                      // run it now
 		if (signal_pending(current)) /* Should go @top & do unambig ..*/
 			break;               /*..0-progress repr w/C wrapper..*/
 	}                                    /*..translating signal-halted. */
@@ -229,6 +232,11 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 	if (!(scTab = (void **)kallsyms_lookup_name("sys_call_table"))) {
 		printk(KERN_ERR "batch: cannot find sys_call_table; "
 		       "Need CONFIG_KALLSYMS & CONFIG_KALLSYMS_ALL\n");
+		return -ENOSYS;
+	}
+	run_task_work = (void (*)(void))kallsyms_lookup_name("task_work_run");
+	if (!run_task_work) {
+		printk(KERN_ERR "batch: cannot find task_work_run\n");
 		return -ENOSYS;
 	}
 	sys_oldcall0 = scTab[__NR_batch];      /* save syscall */
