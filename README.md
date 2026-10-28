@@ -40,10 +40,11 @@ useful to benchmark improvement due to the system call.
 That is all fairly abstract.  A demo [`total.c`](examples/total.c) may help.
 Another example is file tree walking (ftw) when user code needs file metadata
 (sizes, times, owners, ..).  `getdents64` is already a batch interface, but the
-stat's are not.  `du` is a classic example here.  In personal timings, I see
-~1.3x speed-ups for [`mdu.c`](examples/mdu.c) over `BATCH_EMUL=1 mdu` (and ~1.7x
-speed-ups vs GNU `du` since the latter probably uses an `ftw` more expensive
-than [`ftw.c`](examples/ftw.c) to do tree depths unbounded by open fd limits).
+stat's are not.  `du` is a classic example here.  In personal timings on an
+i7-6700k, I see ~1.6x speed-ups for [`mdu.c`](examples/mdu.c) vs. `BATCH_EMUL=1
+mdu` (and ~2.2x speed-ups vs GNU `du` since the latter probably uses an `ftw`
+more expensive than [`ftw.c`](examples/ftw.c) to do tree depths unbounded by
+open fd limits).
 
 Another natural example is "path search" wherein user programs attempt
 several-to-many easily pre-computed paths, stopping at the first one which
