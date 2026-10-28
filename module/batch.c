@@ -11,6 +11,11 @@
 #else
 #	include <linux/sched/signal.h>
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+#	include <linux/nospec.h>         /* array_index_nospec */
+#else
+#	define array_index_nospec(i, n) (i) /* No such mitigation here */
+#endif
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,14,0)
 #  define __NR_syscall_max (NR_syscalls - 1)
 #endif
@@ -99,7 +104,7 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0,
 {
 #endif
 	long          r = 0, off = 0, *krv = NULL;
-	unsigned long i = 0, urEnd = ur0 + ncall * sizeof(long),
+	unsigned long i = 0, nr, urEnd = ur0 + ncall * sizeof(long),
 	              aEnd = uc0 + ncall * sizeof(syscall_t), kr0, kc0;
 	syscall_t    *calls = (syscall_t *)uc0, *buf = NULL;
 	gfp_t         gfp_flags = GFP_KERNEL_ACCOUNT|__GFP_ZERO|__GFP_NOWARN;
@@ -132,10 +137,11 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0,
 				{ krv[i] = -EFAULT; goto errRet; }
 			off = 0;
 			continue; //NOTE: AnyBogus!=__NR_wdcpy encodes fwd jump
-		} // SpectreV1? array_index_nospec(c->nr, __NR_syscall_max + 1)
+		}
+		nr = array_index_nospec((unsigned)c->nr, __NR_syscall_max + 1);
 		r = krv[i] = unlikely(c->nr < 0 || c->nr > __NR_syscall_max ||
-		         (unsigned)c->argc > 6 || !(f = scTab[c->nr])) ? -ENOSYS
-		  : !(d = deny[c->nr]) ? indirect_call(f, c->argc, c->arg)
+		         (unsigned)c->argc > 6 || !(f = scTab[nr])) ? -ENOSYS
+		  : !(d = deny[nr]) ? indirect_call(f, c->argc, c->arg)
 		  : d == 1 ? -ENOSYS :
 		    ({ long x = indirect_call(f, c->argc, c->arg);
 		       if (!x) goto execOk;   /* old mm gone: no copy_to_user */
