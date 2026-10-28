@@ -96,8 +96,8 @@ asmlinkage long sys_batch(const struct pt_regs *regs)
 	unsigned long ur0   = regs->di;
 	unsigned long uc0   = regs->si;
 	unsigned long ncall = regs->dx;
-  	unsigned long flags = regs->r10;
-  	unsigned long size  = regs->r8;
+	unsigned long flags = regs->r10;
+	unsigned long size  = regs->r8;
 #else
 asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0,
 			  unsigned long ncall, long flags, long size)
