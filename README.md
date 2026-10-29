@@ -88,32 +88,28 @@ We can get a sense of the best possible overhead reduction on your CPU by using
 the Nim program [`fitl`](https://github.com/c-blake/fitl) and this repos
 [`examples/getuids.c`](examples/getuids.c):
 ```
-$ BATCH_EMUL=1 ./getuids|awk '{print $3,$2,$1*$2}'|fitl -s0 -c,=,n,b -b100 1 2 3
-$1= -23.41 *$2 + 147.132 *$3
-
-bootstrap-stderr-corr matrix
-     6.577    -0.5422
-               0.6431
-
-$ ./getuids|awk '{print $3,$2,$1*$2}'|fitl -s0 -c,=,n,b -b100 1 2 3 
-$1= 349.83 *$2 + 12.950 *$3
-
-bootstrap-stderr-corr matrix
-     1.126    -0.8054
-               0.1614
+i7-6700k$ ./getuids|awk '{print $3,$2,$1*$2}'|fitl -es0 1 2 3
+$1= (1215.2 +- 5.5) *$2 + (45.33 +- 0.39) *$3
+i7-6700k$ BATCH_EMUL=1 ./getuids|awk '{print $3,$2,$1*$2}'|fitl -es0 1 2 3
+$1= (4.1 +- 2.8) *$2 + (963.59 +- 0.20) *$3
+i7-1370P$ ./getuids|awk '{print $3,$2,$1*$2}'|fitl -es0 1 2 3
+$1= (359.7 +- 3.0) *$2 + (14.37 +- 0.21) *$3
+i7-1370P$ BATCH_EMUL=1 ./getuids|awk '{print $3,$2,$1*$2}'|fitl -es0 1 2 3
+$1= (-37.2 +- 8.4) *$2 + (153.32 +- 0.64) *$3
 ```
-The way to read this is: Doing a user-space loop, the time equation is (-23.4 +-
-6.6) + (147.13 +- 0.64)\*numSysCalls nanoseconds while via `sys_batch` it takes
-(349.8 +- 1.1) + (12.95 +- 0.16)\*numSysCalls.  The per-call overhead ratio is
-thus (147.13 +- 0.64)/(12.95 +- 0.16).  Using [error
-propagation](https://en.wikipedia.org/wiki/Propagation_of_uncertainty) this
-ratio becomes (11.36 +- 0.15).
+Ways to read this: on i7-6700k, `963.59*2 > (1215.2+2*45.33)` => batching pays
+off after under 1.5 syscalls (*much* better than Ballesteros 7 calls), but on
+i7-1370P syscalls are less slow and payoff is at more like 2-2.5 syscalls.  For
+many calls, the speed up is (963.59 +- 0.20)/(45.33 +- 0.39) =~ 21.26X +- 0.18
+on i7-6700k and (153.32 +- 0.64)/(14.37 +- 0.21) =~ 10.67X +- 0.16 on i7-1370P {
+using [error
+propagation](https://en.wikipedia.org/wiki/Propagation_of_uncertainty) }.
 
 Since errors are ~100x smaller than values, this is statistically significant
 and the propagation is approximately correct for Gaussian errors (which these
 are *not*, though, but the leptokurtosis here is not enough to invalidate the
 main result and people care more about the leading ratio than its distribution).
-Since the ratio is >11X faster, it is also a substantial improvement.[^4]
+Since the ratios are 21x & 11X, it is also a substantial improvement.[^4]
 
 Of course, just returning uids is about the least work kernels do.  Almost all
 other calls do much more work on the kernel-side which amortizes entry overhead
@@ -180,8 +176,7 @@ So, this should evolve into a patch set against mainline Linux.  Then it will
 need building your own whole kernel just to try out.  Since almost all interest
 so far in this has been "fly by" interest, time pressure for that is not great.
 
-[^4]: These times are for an Intel i7-1370P running Linux-7.2.8 with no window
-system and only `sshd` running as competing work.  While this is a big-little
-arch, the minimum loop in the benchmark should filter to only times for P-cores.
-One can of course use `taskset` & `chrt` to try to coax Linux schedulers to do
-better, but we did get numbers with seemingly small errors.
+[^4]: These times are for Linux-7.2.8.  While i7-1370P is a big-little arch, the
+min-loop in the benchmark should filter to only times for P-cores.  One can, of
+course, nix all competing work and use `taskset` & `chrt` to try to coax Linux
+schedulers to minimize timing disturbances.
