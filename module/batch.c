@@ -11,6 +11,9 @@
 #else
 #	include <linux/sched/signal.h>
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0) /* < 3,19,0 needs READ_ONCE */
+#	include <linux/sched/task_stack.h>     /* task_pt_regs */
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
 #	include <linux/nospec.h>         /* array_index_nospec */
 #else
@@ -81,8 +84,8 @@ static inline long indirect_call(void *f, int argc, long *a)
 }
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
 #include <linux/kprobes.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
 static struct kprobe kp = { .symbol_name = "kallsyms_lookup_name" };
 #endif
 static void **scTab = 0;
@@ -169,75 +172,36 @@ execOk: kfree(buf);
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
-#include <linux/ftrace.h>
-static unsigned long hook_addr;
-
-static long batch_ni_syscall(const struct pt_regs *regs)
-{ /* TODO try_module_get(THIS_MODULE)/module_put pair for rmmod fail w/EBUSY */
-	if (regs->orig_ax == __NR_batch)      /* syscall_get_nr() on x86 */
-		return sys_batch(regs);
-	return -ENOSYS;                       /* All that ni_syscall does */
-} /* Runs in place of __x64_sys_ni_syscall(regs): same args & return addr. */
-
-static void notrace hook_cb(unsigned long ip, unsigned long parent_ip,
-                            struct ftrace_ops *ops, struct ftrace_regs *fregs)
+static void *ni;                /* What the kernel runs for unimplemented nrs */
+static int ni_pre(struct kprobe *p, struct pt_regs *regs)
 {
-	struct pt_regs *regs = ftrace_get_regs(fregs); /* !0 given SAVE_REGS */
-	if (regs)
-		regs->ip = (unsigned long)batch_ni_syscall;
-}
-
-static struct ftrace_ops hook_ops = {
-	.func  = hook_cb,
-	.flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION |
-	         FTRACE_OPS_FL_IPMODIFY,
-};
-
-static int hook_install(unsigned long addr)
-{
-	int e = ftrace_set_filter_ip(&hook_ops, addr, 0, 0);
-	if (e) {
-		pr_err("batch: ftrace_set_filter_ip: %d; See CONFIG Notes\n",e);
-		return e;
-	}
-	if ((e = register_ftrace_function(&hook_ops))) {
-		ftrace_set_filter_ip(&hook_ops, addr, 1, 0);
-		pr_err("batch: register_ftrace_function: %d\n", e);
-	}
-	return e;
-}
-
-static void hook_remove(unsigned long addr)
-{
-	unregister_ftrace_function(&hook_ops);
-	ftrace_set_filter_ip(&hook_ops, addr, 1, 0);
-}
+	struct pt_regs *user = task_pt_regs(current);
+	if (user->orig_ax != __NR_batch)        /* Another unimplemented nr */
+		return 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+	if (regs->di != (unsigned long)user)    /* Not syscall entry's call */
+		return 0;
 #endif
+	regs->ip = (unsigned long)sys_batch;    /* Same args & return address */
+	return 1;                               /* ip changed: no singlestep */
+}
+/* Not run, but presence stops kprobe jump-optim, which would ignore ip chg. */
+static void ni_post(struct kprobe *p, struct pt_regs *regs, unsigned long fl) {}
+static struct kprobe ni_kp = { .pre_handler = ni_pre, .post_handler = ni_post };
 
-extern unsigned long __force_order __weak;
-#define store_cr0(x) asm volatile("mov %0,%%cr0" : "+r"(x), "+m"(__force_order))
-static void allow_writes(void) {
-	unsigned long cr0 = read_cr0(); clear_bit(16, &cr0); store_cr0(cr0);
-}
-static void disallow_writes(void) {
-	unsigned long cr0 = read_cr0(); set_bit(16, &cr0); store_cr0(cr0);
-}
-void *sys_oldcall0;         /* Likely sys_ni_syscall, but save/restore anyway */
-static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
+static int __init mod_init(void) {      /* Hook the unimplemented function */
+	int i, err;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
 	typedef unsigned long (*fp_t)(const char *name);
 	int rkp_ret;
 	if ((rkp_ret = register_kprobe(&kp)) < 0) {
-		printk(KERN_ERR "batch: cannot register_kprobe; Need "
-		       "CONFIG_KPROBES, _KALLSYMS, & _KALLSYMS_ALL\n");
+		printk(KERN_ERR "batch: No CONFIG_KPROBES,_KALLSYMS,_KALLSYMS_ALL\n");
 		return rkp_ret;
 	}
 	fp_t kallsyms_lookup_name = (fp_t) kp.addr; unregister_kprobe(&kp);
 #endif
 	if (!(scTab = (void **)kallsyms_lookup_name("sys_call_table"))) {
-		printk(KERN_ERR "batch: cannot find sys_call_table; "
-		       "Need CONFIG_KALLSYMS & CONFIG_KALLSYMS_ALL\n");
+		printk(KERN_ERR "batch: No CONFIG_KALLSYMS,_KALLSYMS_ALL\n");
 		return -ENOSYS;
 	}
 	run_task_work = (void (*)(void))kallsyms_lookup_name("task_work_run");
@@ -245,7 +209,7 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 		printk(KERN_ERR "batch: cannot find task_work_run\n");
 		return -ENOSYS;
 	}
-	sys_oldcall0 = scTab[__NR_batch];      /* save syscall */
+	ni = scTab[__NR_batch];                /* Unused slot: ni function */
 	memset(&deny[0], 0, sizeof deny);      /* maybe redundant */
 	BUILD_BUG_ON(__NR_syscall_max + 1 > sizeof deny);
 	deny[__NR_batch]=deny[__NR_clone]=deny[__NR_vfork]=deny[__NR_fork]=
@@ -260,27 +224,21 @@ static int __init mod_init(void) {  /* sys_call_table[__NR_batch] = sys_batch */
 #ifdef __NR_kexec_file_load
 	deny[__NR_kexec_file_load] = 1;
 #endif /* __NR_kexec_file_load */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
-	int err;
-	if (!(hook_addr = kallsyms_lookup_name("__x64_sys_ni_syscall"))) {
-		pr_err("batch: cannot find __x64_sys_ni_syscall\n");
-		return -ENOENT;
-	}
-	if ((err = hook_install(hook_addr)))
+	for (i = 0; i <= __NR_syscall_max; i++) /* Subcalls to unimplemented */
+		if (scTab[i] == ni)             /*.. nrs: -ENOSYS, skipping  */
+			deny[i] = 1;            /*.. kprobe (needed < 4.17)  */
+	ni_kp.addr = (kprobe_opcode_t *)ni;
+	if ((err = register_kprobe(&ni_kp))) {
+		printk(KERN_ERR "batch: No CONFIG_KPROBES\n");
 		return err;
-#endif
-	allow_writes(); scTab[__NR_batch] = sys_batch; disallow_writes();
+	}
 	printk(KERN_INFO "batch: installed as %d\n", __NR_batch);
 	return 0;
 }
-static void __exit mod_cleanup(void) {  /* restore sys_call_table[__NR_batch] */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,9,0) /*backports=>be more precise!*/
-	hook_remove(hook_addr);
-#endif
-	allow_writes(); scTab[__NR_batch] = sys_oldcall0; disallow_writes();
-	/* Presently unsafe to unload while any sys_batch is in progress. */
-	printk(KERN_INFO "batch: removed\n");
-}
+static void __exit mod_cleanup(void) {        /* Unsafe to unload while any */
+	unregister_kprobe(&ni_kp);            /*..batch is in progress, BUT */
+	printk(KERN_INFO "batch: removed\n"); /*..should be a real syscall  */
+}                                             /*..long-term anyway.         */
 module_init(mod_init);
 module_exit(mod_cleanup);
 MODULE_LICENSE("GPL");
