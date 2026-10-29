@@ -99,11 +99,10 @@ $1= (-37.2 +- 8.4) *$2 + (153.32 +- 0.64) *$3
 ```
 Ways to read this: on i7-6700k, `963.59*2 > (1215.2+2*45.33)` => batching pays
 off after under 1.5 syscalls (*much* better than Ballesteros 7 calls), but on
-i7-1370P syscalls are less slow and payoff is at more like 2-2.5 syscalls.  For
-many calls, the speed up is (963.59 +- 0.20)/(45.33 +- 0.39) =~ 21.26X +- 0.18
-on i7-6700k and (153.32 +- 0.64)/(14.37 +- 0.21) =~ 10.67X +- 0.16 on i7-1370P {
-using [error
-propagation](https://en.wikipedia.org/wiki/Propagation_of_uncertainty) }.
+i7-1370P syscalls are less slow and payoff is a bit under 3 syscalls.  For many
+calls, the speed up is (963.59 +- 0.20)/(45.33 +- 0.39) =~ 21.26X +- 0.18 on
+i7-6700k and (153.32 +- 0.64)/(14.37 +- 0.21) =~ 10.67X +- 0.16 on i7-1370P {
+using [error prop.](https://en.wikipedia.org/wiki/Propagation_of_uncertainty) }.
 
 Since errors are ~100x smaller than values, this is statistically significant
 and the propagation is approximately correct for Gaussian errors (which these
