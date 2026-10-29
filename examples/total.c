@@ -1,4 +1,4 @@
-/* Open, fstat, mmap, close, and sum all files specified in av[] */
+/* Open, fstat, mmap, close, and sum 16th byte of all files specified in av[] */
 #include <fcntl.h>          /* O_ macros */
 #include <stdio.h>          /* fprintf, stderr */
 #include <string.h>         /* strerror() */
@@ -43,12 +43,7 @@ char *mapall(char *path, long *len, int *eno) { /* could take prot/flags/etc. */
 	return (char *)ret[7];
 }
 
-int sum(char *buf, long len) {
-	long i, s = 0;
-	for (i = 0; i < len; i++)
-		s += buf[i];
-	return s;
-}
+int sum(char *buf, long len) { return len > 16 ? buf[15] : 123; }
 
 int main(int ac __attribute((unused)), char **av) {
 	int  eno;
