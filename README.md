@@ -81,8 +81,7 @@ BATCH_EMUL=1 ./getuids
 You can also run `strace ./getuids` to see if `afs_syscall` is being used.  You
 may need to set `CONFIG_RANDOMIZE_BASE=n` in your kernel config or reboot with
 `nokaslr=1` on the kernel command line to get a 3rd party module inserted.  You
-also (since Linux-5.7) need `CONFIG_FUNCTION_TRACER=y CONFIG_DYNAMIC_FTRACE=y
-CONFIG_DYNAMIC_FTRACE_WITH_REGS=y` & `sysctl kernel.ftrace_enabled=1`.[^3]
+also need `CONFIG_KPROBES`, `CONFIG_KALLSYMS`, `CONFIG_KALLSYMS_ALL`.[^3]
 
 ## A Simple Benchmark, More Carefully Evaluated
 We can get a sense of the best possible overhead reduction on your CPU by using
