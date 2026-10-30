@@ -39,6 +39,7 @@ static inline long segv(void const *Addr)
 #endif
 	memset(&info, 0, sizeof info);
 	info.si_signo = SIGSEGV;
+	info.si_code = SEGV_MAPERR;     /* else 0 = SI_USER: si_addr unseen */
 	info.si_addr = (void *)Addr;
 	return send_sig_info(SIGSEGV, &info, current);
 }
@@ -123,6 +124,8 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0,
 	kc0 = kr0 + ncall * sizeof(long);
 	if (unlikely(copy_from_user((void *)kc0, calls, ncall * sizeof *calls)))
 		{ kfree(buf); return -EFAULT; }
+	if (unlikely(clear_user((void *)ur0, ncall * sizeof *krv)))
+		{ kfree(buf); return -EFAULT; } /* Before any side effects */
 	for (/**/; i < ncall; i += 1 + off) {
 		void      *f;
 		syscall_t *c = (syscall_t *)(kc0 + i * sizeof *c);
