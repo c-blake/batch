@@ -92,6 +92,14 @@ static struct kprobe kp = { .symbol_name = "kallsyms_lookup_name" };
 static void **scTab = 0;
 static char deny[1024] = { 0 }; /*XXX Pass list rather than a deny list? */
 static void (*run_task_work)(void); /* Not EXPORTed to modules: use kallsyms */
+static inline void run_pending_work(void)
+{
+#ifdef TIF_NOTIFY_SIGNAL        /* TWA_SIGNAL work (io_uring) sets this, & */
+	clear_thread_flag(TIF_NOTIFY_SIGNAL);   /* signal_pending() counts it */
+	smp_mb__after_atomic();                 /* until cleared (5.11+) */
+#endif
+	run_task_work();
+}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 long sys_batch(const struct pt_regs *regs); /* prototype to silence warning */
@@ -162,7 +170,7 @@ asmlinkage long sys_batch(unsigned long ur0, unsigned long uc0,
 			off = c->jump0;
 		if (off < 0) break;
 		if (unlikely(READ_ONCE(current->task_works))) // dup2 fput defer
-			run_task_work();                      // run it now
+			run_pending_work();                   // run it now
 		if (signal_pending(current)) /* Should go @top & do unambig ..*/
 			break;               /*..0-progress repr w/C wrapper..*/
 	}                                    /*..translating signal-halted. */
